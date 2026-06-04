@@ -18,11 +18,13 @@ CREATE TABLE IF NOT EXISTS workout_logs (
     id                     SERIAL PRIMARY KEY,
     user_id                INT     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     exercise               TEXT    NOT NULL CHECK (exercise IN ('squat', 'bench', 'deadlift', 'total')),
-    weight_kg              NUMERIC NOT NULL,
-    reps                   INT     NOT NULL,
-    one_rm_kg              NUMERIC NOT NULL,
-    tier                   TEXT    NOT NULL,
-    world_avg_percentile   INTEGER,
-    competition_percentile INTEGER,
+    weight_kg              NUMERIC NOT NULL CHECK (weight_kg > 0),
+    reps                   INT     NOT NULL CHECK (reps > 0),
+    one_rm_kg              NUMERIC NOT NULL CHECK (one_rm_kg > 0),
+    tier                   TEXT    NOT NULL CHECK (tier IN ('Elite', 'Platinum', 'Gold', 'Silver', 'Bronze', 'Copper')),
+    world_avg_percentile   INTEGER          CHECK (world_avg_percentile BETWEEN 0 AND 100),
+    competition_percentile INTEGER          CHECK (competition_percentile BETWEEN 0 AND 100),
     logged_at              TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS workout_logs_user_id_idx ON workout_logs (user_id);
