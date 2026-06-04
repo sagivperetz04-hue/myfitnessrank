@@ -1,3 +1,7 @@
+import logging
+
+log = logging.getLogger(__name__)
+
 WEIGHT_CLASSES = {
     'M': [59, 66, 74, 83, 93, 105, 120, 999],
     'F': [47, 52, 57, 63, 69, 76, 84, 999],
@@ -33,7 +37,6 @@ def assign_tier(percentile: int) -> str:
 
 
 def get_percentile(conn, lift: str, sex: str, bodyweight_kg: float, one_rm_kg: float, track: str) -> int:
-    import logging
     weight_class = assign_weight_class(bodyweight_kg, sex)
     with conn.cursor() as cur:
         cur.execute(
@@ -48,7 +51,7 @@ def get_percentile(conn, lift: str, sex: str, bodyweight_kg: float, one_rm_kg: f
         )
         row = cur.fetchone()
     if row is None:
-        logging.getLogger(__name__).warning(
+        log.warning(
             "no standard found for lift=%s sex=%s weight_class=%s track=%s — defaulting to 0",
             lift, sex, weight_class, track,
         )

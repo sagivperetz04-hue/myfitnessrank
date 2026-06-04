@@ -38,6 +38,13 @@ def _close_db(exc):
 
 @app.route('/health')
 def health():
+    try:
+        conn = _db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+    except Exception as exc:
+        log.error("health check db ping failed: %s", exc)
+        return jsonify({"status": "error", "detail": "db unavailable"}), 503
     return jsonify({"status": "ok"}), 200
 
 
@@ -50,9 +57,6 @@ def rank():
         return jsonify({"error": f"missing fields: {missing}"}), 400
 
     exercise      = body['exercise']
-    weight_kg     = float(body['weight_kg'])
-    reps          = int(body['reps'])
-    bodyweight_kg = float(body['bodyweight_kg'])
     sex           = str(body['sex']).upper()
     track         = body['track']
     username      = body['username']
@@ -63,6 +67,16 @@ def rank():
         return jsonify({"error": f"track must be one of {_VALID_TRACKS}"}), 400
     if exercise not in _VALID_EXERCISES:
         return jsonify({"error": f"exercise must be one of {_VALID_EXERCISES}"}), 400
+
+    try:
+        weight_kg     = float(body['weight_kg'])
+        reps          = int(body['reps'])
+        bodyweight_kg = float(body['bodyweight_kg'])
+    except (ValueError, TypeError):
+        return jsonify({"error": "weight_kg and bodyweight_kg must be numbers, reps must be an integer"}), 400
+
+    if weight_kg <= 0 or bodyweight_kg <= 0 or reps <= 0:
+        return jsonify({"error": "weight_kg, bodyweight_kg, and reps must be positive"}), 400
 
     one_rm_kg    = calculate_1rm(weight_kg, reps)
     weight_class = assign_weight_class(bodyweight_kg, sex)
