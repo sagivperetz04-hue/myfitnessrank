@@ -9,13 +9,13 @@ CREATE TABLE IF NOT EXISTS global_standards (
 );
 
 CREATE TABLE IF NOT EXISTS users (
-    id         SERIAL PRIMARY KEY,
+    id         BIGSERIAL PRIMARY KEY,
     username   TEXT UNIQUE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS workout_logs (
-    id              SERIAL  PRIMARY KEY,
+    id              BIGSERIAL PRIMARY KEY,
     user_id         INT     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     exercise        TEXT    NOT NULL CHECK (exercise IN ('squat', 'bench', 'deadlift', 'total')),
     weight_kg       NUMERIC NOT NULL CHECK (weight_kg > 0),
