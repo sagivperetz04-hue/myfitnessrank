@@ -56,10 +56,10 @@ def rank():
     if missing:
         return jsonify({"error": f"missing fields: {missing}"}), 400
 
-    exercise      = body['exercise']
-    sex           = str(body['sex']).upper()
-    track         = body['track']
-    username      = body['username']
+    exercise = body['exercise']
+    sex      = str(body['sex']).upper()
+    track    = body['track']
+    username = body['username']
 
     if sex not in ('M', 'F'):
         return jsonify({"error": "sex must be M or F"}), 400
@@ -99,15 +99,12 @@ def rank():
             cur.execute(
                 """
                 INSERT INTO workout_logs
-                  (user_id, exercise, weight_kg, reps, one_rm_kg, tier,
-                   world_avg_percentile, competition_percentile)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                  (user_id, exercise, weight_kg, reps, one_rm_kg,
+                   bodyweight_kg, sex, weight_class_kg, track, percentile, tier)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (
-                    user_id, exercise, weight_kg, reps, one_rm_kg, tier,
-                    percentile if track == 'world_avg' else None,
-                    percentile if track == 'competition' else None,
-                ),
+                (user_id, exercise, weight_kg, reps, one_rm_kg,
+                 bodyweight_kg, sex, weight_class, track, percentile, tier),
             )
             conn.commit()
     except Exception as exc:
@@ -122,6 +119,100 @@ def rank():
         "weight_class_kg": weight_class,
         "percentile":      percentile,
         "tier":            tier,
+    }), 200
+
+
+@app.route('/api/users/<username>/history', methods=['GET'])
+def user_history(username):
+    exercise = request.args.get('exercise')
+    if exercise and exercise not in _VALID_EXERCISES:
+        return jsonify({"error": f"exercise must be one of {_VALID_EXERCISES}"}), 400
+
+    try:
+        limit  = min(int(request.args.get('limit',  20)), 100)
+        offset = max(int(request.args.get('offset',  0)),   0)
+    except (ValueError, TypeError):
+        return jsonify({"error": "limit and offset must be integers"}), 400
+
+    try:
+        conn = _db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+            user = cur.fetchone()
+
+        if user is None:
+            return jsonify({"error": "user not found"}), 404
+
+        with conn.cursor() as cur:
+            if exercise:
+                cur.execute(
+                    """
+                    SELECT id, exercise, weight_kg, reps, one_rm_kg,
+                           bodyweight_kg, sex, weight_class_kg,
+                           track, percentile, tier, logged_at
+                    FROM workout_logs
+                    WHERE user_id = %s AND exercise = %s
+                    ORDER BY logged_at DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (user['id'], exercise, limit, offset),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id, exercise, weight_kg, reps, one_rm_kg,
+                           bodyweight_kg, sex, weight_class_kg,
+                           track, percentile, tier, logged_at
+                    FROM workout_logs
+                    WHERE user_id = %s
+                    ORDER BY logged_at DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (user['id'], limit, offset),
+                )
+            rows = cur.fetchall()
+    except Exception as exc:
+        log.error("db error in /api/users/history: %s", exc)
+        return jsonify({"error": "database error"}), 500
+
+    return jsonify({
+        "username": username,
+        "logs": [_format_log(r) for r in rows],
+    }), 200
+
+
+@app.route('/api/users/<username>/best', methods=['GET'])
+def user_best(username):
+    try:
+        conn = _db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+            user = cur.fetchone()
+
+        if user is None:
+            return jsonify({"error": "user not found"}), 404
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (exercise)
+                    exercise, weight_kg, reps, one_rm_kg,
+                    bodyweight_kg, sex, weight_class_kg,
+                    track, percentile, tier, logged_at
+                FROM workout_logs
+                WHERE user_id = %s
+                ORDER BY exercise, one_rm_kg DESC
+                """,
+                (user['id'],),
+            )
+            rows = cur.fetchall()
+    except Exception as exc:
+        log.error("db error in /api/users/best: %s", exc)
+        return jsonify({"error": "database error"}), 500
+
+    return jsonify({
+        "username": username,
+        "bests": {r['exercise']: _format_log(r) for r in rows},
     }), 200
 
 
@@ -145,6 +236,22 @@ def leaderboard():
         return jsonify({"error": "upstream unavailable"}), 502
 
     return jsonify({"lifters": data}), 200
+
+
+def _format_log(row) -> dict:
+    return {
+        "exercise":        row['exercise'],
+        "weight_kg":       float(row['weight_kg']),
+        "reps":            row['reps'],
+        "one_rm_kg":       float(row['one_rm_kg']),
+        "bodyweight_kg":   float(row['bodyweight_kg']),
+        "sex":             row['sex'],
+        "weight_class_kg": row['weight_class_kg'],
+        "track":           row['track'],
+        "percentile":      row['percentile'],
+        "tier":            row['tier'],
+        "logged_at":       row['logged_at'].isoformat(),
+    }
 
 
 if __name__ == '__main__':
