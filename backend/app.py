@@ -3,7 +3,7 @@ import logging
 
 from flask import Flask, g, jsonify, request
 
-from db import get_connection
+from db import get_connection, return_connection
 from services.ranking import (
     assign_tier,
     assign_weight_class,
@@ -31,9 +31,9 @@ def _db():
 def _close_db(exc):
     conn = g.pop('db', None)
     if conn is not None:
-        if exc is not None:
+        if exc is not None and conn.closed == 0:
             conn.rollback()
-        conn.close()
+        return_connection(conn)  # returns to pool; discards if broken
 
 
 @app.route('/health')
@@ -77,6 +77,8 @@ def rank():
 
     if weight_kg <= 0 or bodyweight_kg <= 0 or reps <= 0:
         return jsonify({"error": "weight_kg, bodyweight_kg, and reps must be positive"}), 400
+    if reps > 20:
+        return jsonify({"error": "reps must be 20 or fewer — Epley formula is unreliable above 20"}), 400
 
     one_rm_kg    = calculate_1rm(weight_kg, reps)
     weight_class = assign_weight_class(bodyweight_kg, sex)
