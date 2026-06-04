@@ -61,6 +61,8 @@ def rank():
     track    = body['track']
     username = body['username']
 
+    if not username or not str(username).strip():
+        return jsonify({"error": "username must not be empty"}), 400
     if sex not in ('M', 'F'):
         return jsonify({"error": "sex must be M or F"}), 400
     if track not in _VALID_TRACKS:
