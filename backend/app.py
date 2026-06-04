@@ -31,6 +31,8 @@ def _db():
 def _close_db(exc):
     conn = g.pop('db', None)
     if conn is not None:
+        if exc is not None:
+            conn.rollback()
         conn.close()
 
 
@@ -64,34 +66,39 @@ def rank():
 
     one_rm_kg    = calculate_1rm(weight_kg, reps)
     weight_class = assign_weight_class(bodyweight_kg, sex)
-    conn         = _db()
 
-    with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO users (username) VALUES (%s) ON CONFLICT (username) DO NOTHING",
-            (username,),
-        )
-        cur.execute("SELECT id FROM users WHERE username = %s", (username,))
-        user_id = cur.fetchone()['id']
+    try:
+        conn = _db()
 
-    percentile = get_percentile(conn, exercise, sex, bodyweight_kg, one_rm_kg, track)
-    tier       = assign_tier(percentile)
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO users (username) VALUES (%s) ON CONFLICT (username) DO NOTHING",
+                (username,),
+            )
+            cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+            user_id = cur.fetchone()['id']
 
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO workout_logs
-              (user_id, exercise, weight_kg, reps, one_rm_kg, tier,
-               world_avg_percentile, competition_percentile)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                user_id, exercise, weight_kg, reps, one_rm_kg, tier,
-                percentile if track == 'world_avg' else None,
-                percentile if track == 'competition' else None,
-            ),
-        )
-        conn.commit()
+        percentile = get_percentile(conn, exercise, sex, bodyweight_kg, one_rm_kg, track)
+        tier       = assign_tier(percentile)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO workout_logs
+                  (user_id, exercise, weight_kg, reps, one_rm_kg, tier,
+                   world_avg_percentile, competition_percentile)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    user_id, exercise, weight_kg, reps, one_rm_kg, tier,
+                    percentile if track == 'world_avg' else None,
+                    percentile if track == 'competition' else None,
+                ),
+            )
+            conn.commit()
+    except Exception as exc:
+        log.error("db error in /api/rank: %s", exc)
+        return jsonify({"error": "database error"}), 500
 
     log.info("ranked user=%s exercise=%s 1rm=%.1f percentile=%d tier=%s",
              username, exercise, one_rm_kg, percentile, tier)
