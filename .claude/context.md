@@ -76,7 +76,7 @@ CREATE TABLE workout_logs (
 | Method | Path | Description |
 |---|---|---|
 | GET | `/health` | K8s liveness/readiness probe |
-| POST | `/api/rank` | Body: `{exercise, weight_kg, reps}` → returns `{1rm, tier}` |
+| POST | `/api/rank` | Body: `{username, exercise, weight_kg, reps, bodyweight_kg, sex}` → returns `{one_rm_kg, weight_class_kg, competition: {percentile, tier}, world_avg: {percentile, tier}}` |
 | GET | `/api/rank/history` | Returns recent logs for the user |
 | POST | `/api/log` | Save a workout set |
 

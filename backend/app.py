@@ -18,7 +18,6 @@ log = logging.getLogger(__name__)
 app = Flask(__name__)
 
 _VALID_EXERCISES = ('squat', 'bench', 'deadlift', 'total')
-_VALID_TRACKS    = ('world_avg', 'competition')
 
 
 def _db():
@@ -51,22 +50,19 @@ def health():
 @app.route('/api/rank', methods=['POST'])
 def rank():
     body = request.get_json(silent=True) or {}
-    required = ('username', 'exercise', 'weight_kg', 'reps', 'bodyweight_kg', 'sex', 'track')
+    required = ('username', 'exercise', 'weight_kg', 'reps', 'bodyweight_kg', 'sex')
     missing = [f for f in required if f not in body]
     if missing:
         return jsonify({"error": f"missing fields: {missing}"}), 400
 
     exercise = body['exercise']
     sex      = str(body['sex']).upper()
-    track    = body['track']
     username = body['username']
 
     if not username or not str(username).strip():
         return jsonify({"error": "username must not be empty"}), 400
     if sex not in ('M', 'F'):
         return jsonify({"error": "sex must be M or F"}), 400
-    if track not in _VALID_TRACKS:
-        return jsonify({"error": f"track must be one of {_VALID_TRACKS}"}), 400
     if exercise not in _VALID_EXERCISES:
         return jsonify({"error": f"exercise must be one of {_VALID_EXERCISES}"}), 400
 
@@ -96,33 +92,43 @@ def rank():
             cur.execute("SELECT id FROM users WHERE username = %s", (username,))
             user_id = cur.fetchone()['id']
 
-        percentile = get_percentile(conn, exercise, sex, bodyweight_kg, one_rm_kg, track)
-        tier       = assign_tier(percentile)
+        comp_percentile = get_percentile(conn, exercise, sex, bodyweight_kg, one_rm_kg, 'competition')
+        comp_tier       = assign_tier(comp_percentile)
+        avg_percentile  = get_percentile(conn, exercise, sex, bodyweight_kg, one_rm_kg, 'world_avg')
+        avg_tier        = assign_tier(avg_percentile)
 
         with conn.cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO workout_logs
                   (user_id, exercise, weight_kg, reps, one_rm_kg,
-                   bodyweight_kg, sex, weight_class_kg, track, percentile, tier)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   bodyweight_kg, sex, weight_class_kg,
+                   competition_percentile, competition_tier,
+                   world_avg_percentile, world_avg_tier)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (user_id, exercise, weight_kg, reps, one_rm_kg,
-                 bodyweight_kg, sex, weight_class, track, percentile, tier),
+                 bodyweight_kg, sex, weight_class,
+                 comp_percentile, comp_tier,
+                 avg_percentile, avg_tier),
             )
             conn.commit()
     except Exception as exc:
         log.error("db error in /api/rank: %s", exc)
         return jsonify({"error": "database error"}), 500
 
-    log.info("ranked user=%s exercise=%s 1rm=%.1f percentile=%d tier=%s",
-             username, exercise, one_rm_kg, percentile, tier)
+    log.info(
+        "ranked user=%s exercise=%s 1rm=%.1f comp=%d(%s) world_avg=%d(%s)",
+        username, exercise, one_rm_kg,
+        comp_percentile, comp_tier,
+        avg_percentile, avg_tier,
+    )
 
     return jsonify({
         "one_rm_kg":       one_rm_kg,
         "weight_class_kg": weight_class,
-        "percentile":      percentile,
-        "tier":            tier,
+        "competition":     {"percentile": comp_percentile, "tier": comp_tier},
+        "world_avg":       {"percentile": avg_percentile,  "tier": avg_tier},
     }), 200
 
 
@@ -153,7 +159,9 @@ def user_history(username):
                     """
                     SELECT id, exercise, weight_kg, reps, one_rm_kg,
                            bodyweight_kg, sex, weight_class_kg,
-                           track, percentile, tier, logged_at
+                           competition_percentile, competition_tier,
+                           world_avg_percentile, world_avg_tier,
+                           logged_at
                     FROM workout_logs
                     WHERE user_id = %s AND exercise = %s
                     ORDER BY logged_at DESC
@@ -166,7 +174,9 @@ def user_history(username):
                     """
                     SELECT id, exercise, weight_kg, reps, one_rm_kg,
                            bodyweight_kg, sex, weight_class_kg,
-                           track, percentile, tier, logged_at
+                           competition_percentile, competition_tier,
+                           world_avg_percentile, world_avg_tier,
+                           logged_at
                     FROM workout_logs
                     WHERE user_id = %s
                     ORDER BY logged_at DESC
@@ -202,7 +212,9 @@ def user_best(username):
                 SELECT DISTINCT ON (exercise)
                     exercise, weight_kg, reps, one_rm_kg,
                     bodyweight_kg, sex, weight_class_kg,
-                    track, percentile, tier, logged_at
+                    competition_percentile, competition_tier,
+                    world_avg_percentile, world_avg_tier,
+                    logged_at
                 FROM workout_logs
                 WHERE user_id = %s
                 ORDER BY exercise, one_rm_kg DESC
@@ -251,9 +263,8 @@ def _format_log(row) -> dict:
         "bodyweight_kg":   float(row['bodyweight_kg']),
         "sex":             row['sex'],
         "weight_class_kg": row['weight_class_kg'],
-        "track":           row['track'],
-        "percentile":      row['percentile'],
-        "tier":            row['tier'],
+        "competition":     {"percentile": row['competition_percentile'], "tier": row['competition_tier']},
+        "world_avg":       {"percentile": row['world_avg_percentile'],   "tier": row['world_avg_tier']},
         "logged_at":       row['logged_at'].isoformat(),
     }
 

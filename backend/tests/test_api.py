@@ -2,13 +2,12 @@
 import pytest
 
 VALID = {
-    "username":     "testuser",
-    "exercise":     "squat",
-    "weight_kg":    100,
-    "reps":         5,
+    "username":      "testuser",
+    "exercise":      "squat",
+    "weight_kg":     100,
+    "reps":          5,
     "bodyweight_kg": 85,
-    "sex":          "M",
-    "track":        "world_avg",
+    "sex":           "M",
 }
 
 VALID_TIERS = {"Elite", "Platinum", "Gold", "Silver", "Bronze", "Copper"}
@@ -31,7 +30,9 @@ class TestRankHappyPath:
 
     def test_response_shape(self, client):
         data = client.post("/api/rank", json=VALID).get_json()
-        assert {"one_rm_kg", "weight_class_kg", "percentile", "tier"} <= data.keys()
+        assert {"one_rm_kg", "weight_class_kg", "competition", "world_avg"} <= data.keys()
+        assert {"percentile", "tier"} <= data["competition"].keys()
+        assert {"percentile", "tier"} <= data["world_avg"].keys()
 
     def test_1rm_calculation(self, client):
         # 100kg × (1 + 5/30) = 116.666… → rounded to 116.7
@@ -46,24 +47,21 @@ class TestRankHappyPath:
         data = client.post("/api/rank", json={**VALID, "sex": "F", "bodyweight_kg": 60}).get_json()
         assert data["weight_class_kg"] == 63
 
-    def test_tier_is_valid(self, client):
+    def test_tiers_are_valid(self, client):
         data = client.post("/api/rank", json=VALID).get_json()
-        assert data["tier"] in VALID_TIERS
+        assert data["competition"]["tier"] in VALID_TIERS
+        assert data["world_avg"]["tier"] in VALID_TIERS
 
-    def test_percentile_in_range(self, client):
+    def test_percentiles_in_range(self, client):
         data = client.post("/api/rank", json=VALID).get_json()
-        assert 0 <= data["percentile"] <= 100
+        assert 0 <= data["competition"]["percentile"] <= 100
+        assert 0 <= data["world_avg"]["percentile"] <= 100
 
     def test_same_username_twice_is_idempotent(self, client):
         r1 = client.post("/api/rank", json=VALID)
         r2 = client.post("/api/rank", json=VALID)
         assert r1.status_code == 200
         assert r2.status_code == 200
-
-    def test_competition_track(self, client):
-        r = client.post("/api/rank", json={**VALID, "track": "competition"})
-        assert r.status_code == 200
-        assert r.get_json()["tier"] in VALID_TIERS
 
     def test_all_exercises_accepted(self, client):
         for exercise in ("squat", "bench", "deadlift", "total"):
@@ -93,9 +91,6 @@ class TestRankValidation:
 
     def test_invalid_exercise_returns_400(self, client):
         assert client.post("/api/rank", json={**VALID, "exercise": "curls"}).status_code == 400
-
-    def test_invalid_track_returns_400(self, client):
-        assert client.post("/api/rank", json={**VALID, "track": "powerlifting"}).status_code == 400
 
     def test_reps_above_20_returns_400(self, client):
         assert client.post("/api/rank", json={**VALID, "reps": 21}).status_code == 400
@@ -135,14 +130,15 @@ class TestHistory:
         logs = r.get_json()["logs"]
         assert len(logs) == 1
         assert logs[0]["exercise"] == "squat"
-        assert logs[0]["tier"] in VALID_TIERS
+        assert logs[0]["competition"]["tier"] in VALID_TIERS
+        assert logs[0]["world_avg"]["tier"] in VALID_TIERS
 
     def test_log_contains_expected_fields(self, client):
         client.post("/api/rank", json=VALID)
         log = client.get(f"/api/users/{VALID['username']}/history").get_json()["logs"][0]
         expected = {"exercise", "weight_kg", "reps", "one_rm_kg",
                     "bodyweight_kg", "sex", "weight_class_kg",
-                    "track", "percentile", "tier", "logged_at"}
+                    "competition", "world_avg", "logged_at"}
         assert expected <= log.keys()
 
     def test_log_values_match_input(self, client):
@@ -152,7 +148,6 @@ class TestHistory:
         assert log["reps"]          == VALID["reps"]
         assert log["bodyweight_kg"] == float(VALID["bodyweight_kg"])
         assert log["sex"]           == VALID["sex"]
-        assert log["track"]         == VALID["track"]
 
     def test_multiple_logs_ordered_newest_first(self, client):
         client.post("/api/rank", json={**VALID, "weight_kg": 80})
