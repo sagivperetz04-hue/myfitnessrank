@@ -57,6 +57,8 @@ Related repositories (separate repos, not this one):
 
 Types: `feat`, `fix`, `chore`, `ci`, `infra`, `docs`, `test`
 
+**No signature.** Never add `Co-Authored-By: Claude` or any Claude attribution to commit messages or files.
+
 ## Destructive Actions — Never Run Autonomously
 
 Always show the command and wait for the user to run:
@@ -76,6 +78,21 @@ Always show the command and wait for the user to run:
 - **No comments explaining WHAT the code does.** Only comment WHY if it's non-obvious.
 - **No speculative features.** Implement what was asked, nothing more.
 - **Security first.** No hardcoded secrets, no `latest` tags in production manifests, no running as root.
+
+## GitHub Actions — SHA Pinning Rules
+
+Every `uses:` line must be pinned to a full commit SHA, never a floating tag (`@v4`, `@latest`).
+
+**Always resolve SHAs live via the GitHub API before writing or updating any action.** Never use a SHA from memory — it may be stale.
+
+Resolution process for every action:
+1. `curl -s https://api.github.com/repos/<owner>/<action>/releases/latest` → get tag name
+2. `curl -s https://api.github.com/repos/<owner>/<action>/git/ref/tags/<tag>` → get object type + SHA
+3. If type is `tag` (annotated): `curl -s https://api.github.com/repos/<owner>/<action>/git/tags/<sha>` → use `.object.sha`
+4. If type is `commit`: use the SHA directly
+5. Write: `uses: owner/action@<commit-sha>  # <tag>`
+
+Always check `releases/latest` — never assume the version you know is current.
 
 ## CI Overview
 
