@@ -34,7 +34,7 @@ def apply_schema_and_seed():
 
     base = os.path.join(os.path.dirname(__file__), "..")
     schema_path = os.path.join(base, "schema.sql")
-    seed_path   = os.path.join(base, "scripts", "seed_global_standards.sql")
+    seed_path = os.path.join(base, "scripts", "seed_global_standards.sql")
 
     conn = _raw_conn(TEST_DB_URL)
     with conn.cursor() as cur:

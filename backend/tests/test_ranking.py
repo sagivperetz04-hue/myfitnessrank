@@ -1,5 +1,5 @@
 """Unit tests for ranking logic — no database required."""
-import pytest
+
 from services.ranking import assign_tier, assign_weight_class, calculate_1rm
 
 

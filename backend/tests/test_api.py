@@ -1,19 +1,19 @@
 """Integration tests for all API routes against a real Postgres database."""
-import pytest
 
 VALID = {
-    "username":      "testuser",
-    "exercise":      "squat",
-    "weight_kg":     100,
-    "reps":          5,
+    "username": "testuser",
+    "exercise": "squat",
+    "weight_kg": 100,
+    "reps": 5,
     "bodyweight_kg": 85,
-    "sex":           "M",
+    "sex": "M",
 }
 
 VALID_TIERS = {"Elite", "Platinum", "Gold", "Silver", "Bronze", "Copper"}
 
 
 # ── /health ───────────────────────────────────────────────────────────────────
+
 
 class TestHealth:
     def test_returns_200_and_ok(self, client):
@@ -24,13 +24,19 @@ class TestHealth:
 
 # ── POST /api/rank ────────────────────────────────────────────────────────────
 
+
 class TestRankHappyPath:
     def test_returns_200(self, client):
         assert client.post("/api/rank", json=VALID).status_code == 200
 
     def test_response_shape(self, client):
         data = client.post("/api/rank", json=VALID).get_json()
-        assert {"one_rm_kg", "weight_class_kg", "competition", "world_avg"} <= data.keys()
+        assert {
+            "one_rm_kg",
+            "weight_class_kg",
+            "competition",
+            "world_avg",
+        } <= data.keys()
         assert {"percentile", "tier"} <= data["competition"].keys()
         assert {"percentile", "tier"} <= data["world_avg"].keys()
 
@@ -44,7 +50,9 @@ class TestRankHappyPath:
         assert data["weight_class_kg"] == 93
 
     def test_weight_class_for_female(self, client):
-        data = client.post("/api/rank", json={**VALID, "sex": "F", "bodyweight_kg": 60}).get_json()
+        data = client.post(
+            "/api/rank", json={**VALID, "sex": "F", "bodyweight_kg": 60}
+        ).get_json()
         assert data["weight_class_kg"] == 63
 
     def test_tiers_are_valid(self, client):
@@ -81,16 +89,24 @@ class TestRankValidation:
             assert r.status_code == 400, f"expected 400 when '{field}' is missing"
 
     def test_empty_username_returns_400(self, client):
-        assert client.post("/api/rank", json={**VALID, "username": ""}).status_code == 400
+        assert (
+            client.post("/api/rank", json={**VALID, "username": ""}).status_code == 400
+        )
 
     def test_whitespace_username_returns_400(self, client):
-        assert client.post("/api/rank", json={**VALID, "username": "   "}).status_code == 400
+        assert (
+            client.post("/api/rank", json={**VALID, "username": "   "}).status_code
+            == 400
+        )
 
     def test_invalid_sex_returns_400(self, client):
         assert client.post("/api/rank", json={**VALID, "sex": "X"}).status_code == 400
 
     def test_invalid_exercise_returns_400(self, client):
-        assert client.post("/api/rank", json={**VALID, "exercise": "curls"}).status_code == 400
+        assert (
+            client.post("/api/rank", json={**VALID, "exercise": "curls"}).status_code
+            == 400
+        )
 
     def test_reps_above_20_returns_400(self, client):
         assert client.post("/api/rank", json={**VALID, "reps": 21}).status_code == 400
@@ -102,22 +118,33 @@ class TestRankValidation:
         assert client.post("/api/rank", json={**VALID, "reps": -1}).status_code == 400
 
     def test_weight_zero_returns_400(self, client):
-        assert client.post("/api/rank", json={**VALID, "weight_kg": 0}).status_code == 400
+        assert (
+            client.post("/api/rank", json={**VALID, "weight_kg": 0}).status_code == 400
+        )
 
     def test_weight_negative_returns_400(self, client):
-        assert client.post("/api/rank", json={**VALID, "weight_kg": -10}).status_code == 400
+        assert (
+            client.post("/api/rank", json={**VALID, "weight_kg": -10}).status_code
+            == 400
+        )
 
     def test_non_numeric_weight_returns_400(self, client):
-        assert client.post("/api/rank", json={**VALID, "weight_kg": "heavy"}).status_code == 400
+        assert (
+            client.post("/api/rank", json={**VALID, "weight_kg": "heavy"}).status_code
+            == 400
+        )
 
     def test_non_numeric_reps_returns_400(self, client):
-        assert client.post("/api/rank", json={**VALID, "reps": "five"}).status_code == 400
+        assert (
+            client.post("/api/rank", json={**VALID, "reps": "five"}).status_code == 400
+        )
 
     def test_empty_body_returns_400(self, client):
         assert client.post("/api/rank", json={}).status_code == 400
 
 
 # ── GET /api/users/<username>/history ────────────────────────────────────────
+
 
 class TestHistory:
     def test_unknown_user_returns_404(self, client):
@@ -135,19 +162,32 @@ class TestHistory:
 
     def test_log_contains_expected_fields(self, client):
         client.post("/api/rank", json=VALID)
-        log = client.get(f"/api/users/{VALID['username']}/history").get_json()["logs"][0]
-        expected = {"exercise", "weight_kg", "reps", "one_rm_kg",
-                    "bodyweight_kg", "sex", "weight_class_kg",
-                    "competition", "world_avg", "logged_at"}
+        log = client.get(f"/api/users/{VALID['username']}/history").get_json()["logs"][
+            0
+        ]
+        expected = {
+            "exercise",
+            "weight_kg",
+            "reps",
+            "one_rm_kg",
+            "bodyweight_kg",
+            "sex",
+            "weight_class_kg",
+            "competition",
+            "world_avg",
+            "logged_at",
+        }
         assert expected <= log.keys()
 
     def test_log_values_match_input(self, client):
         client.post("/api/rank", json=VALID)
-        log = client.get(f"/api/users/{VALID['username']}/history").get_json()["logs"][0]
-        assert log["weight_kg"]     == float(VALID["weight_kg"])
-        assert log["reps"]          == VALID["reps"]
+        log = client.get(f"/api/users/{VALID['username']}/history").get_json()["logs"][
+            0
+        ]
+        assert log["weight_kg"] == float(VALID["weight_kg"])
+        assert log["reps"] == VALID["reps"]
         assert log["bodyweight_kg"] == float(VALID["bodyweight_kg"])
-        assert log["sex"]           == VALID["sex"]
+        assert log["sex"] == VALID["sex"]
 
     def test_multiple_logs_ordered_newest_first(self, client):
         client.post("/api/rank", json={**VALID, "weight_kg": 80})
@@ -168,9 +208,9 @@ class TestHistory:
     def test_pagination_limit(self, client):
         for _ in range(5):
             client.post("/api/rank", json=VALID)
-        logs = client.get(
-            f"/api/users/{VALID['username']}/history?limit=2"
-        ).get_json()["logs"]
+        logs = client.get(f"/api/users/{VALID['username']}/history?limit=2").get_json()[
+            "logs"
+        ]
         assert len(logs) == 2
 
     def test_pagination_offset(self, client):
@@ -183,7 +223,9 @@ class TestHistory:
         assert logs[0]["weight_kg"] == 90.0
 
     def test_invalid_exercise_filter_returns_400(self, client):
-        assert client.get("/api/users/testuser/history?exercise=curls").status_code == 400
+        assert (
+            client.get("/api/users/testuser/history?exercise=curls").status_code == 400
+        )
 
     def test_limit_capped_at_100(self, client):
         client.post("/api/rank", json=VALID)
@@ -192,6 +234,7 @@ class TestHistory:
 
 
 # ── GET /api/users/<username>/best ───────────────────────────────────────────
+
 
 class TestBest:
     def test_unknown_user_returns_404(self, client):
@@ -206,7 +249,9 @@ class TestBest:
 
     def test_best_selects_highest_1rm_not_last(self, client):
         client.post("/api/rank", json={**VALID, "weight_kg": 100})
-        client.post("/api/rank", json={**VALID, "weight_kg": 80})  # logged last but lower
+        client.post(
+            "/api/rank", json={**VALID, "weight_kg": 80}
+        )  # logged last but lower
         bests = client.get(f"/api/users/{VALID['username']}/best").get_json()["bests"]
         assert bests["squat"]["one_rm_kg"] == 116.7
 
@@ -221,7 +266,10 @@ class TestBest:
         # Create a user via rank, then wipe only workout_logs manually
         client.post("/api/rank", json=VALID)
         import psycopg2
-        conn = psycopg2.connect("postgresql://postgres:testpass@localhost:5433/fitrank_test")
+
+        conn = psycopg2.connect(
+            "postgresql://postgres:testpass@localhost:5433/fitrank_test"
+        )
         conn.autocommit = True
         with conn.cursor() as cur:
             cur.execute("TRUNCATE workout_logs")

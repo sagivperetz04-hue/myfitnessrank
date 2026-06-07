@@ -17,9 +17,9 @@ def _get_pool() -> ThreadedConnectionPool:
         with _lock:
             if _pool is None:  # double-checked — only one thread creates the pool
                 _pool = ThreadedConnectionPool(
-                    int(os.environ.get('DB_POOL_MIN', 1)),
-                    int(os.environ.get('DB_POOL_MAX', 5)),
-                    os.environ['DATABASE_URL'],
+                    int(os.environ.get("DB_POOL_MIN", 1)),
+                    int(os.environ.get("DB_POOL_MAX", 5)),
+                    os.environ["DATABASE_URL"],
                     cursor_factory=RealDictCursor,
                 )
     return _pool

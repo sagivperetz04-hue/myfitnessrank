@@ -3,18 +3,18 @@ import logging
 log = logging.getLogger(__name__)
 
 WEIGHT_CLASSES = {
-    'M': [59, 66, 74, 83, 93, 105, 120, 999],
-    'F': [47, 52, 57, 63, 69, 76, 84, 999],
+    "M": [59, 66, 74, 83, 93, 105, 120, 999],
+    "F": [47, 52, 57, 63, 69, 76, 84, 999],
 }
 
 # Descending order — first threshold the percentile meets wins
 _TIER_MAP = [
-    (99, 'Elite'),
-    (95, 'Platinum'),
-    (90, 'Gold'),
-    (75, 'Silver'),
-    (50, 'Bronze'),
-    (0,  'Copper'),
+    (99, "Elite"),
+    (95, "Platinum"),
+    (90, "Gold"),
+    (75, "Silver"),
+    (50, "Bronze"),
+    (0, "Copper"),
 ]
 
 
@@ -33,10 +33,12 @@ def assign_tier(percentile: int) -> str:
     for threshold, tier in _TIER_MAP:
         if percentile >= threshold:
             return tier
-    return 'Copper'
+    return "Copper"
 
 
-def get_percentile(conn, lift: str, sex: str, bodyweight_kg: float, one_rm_kg: float, track: str) -> int:
+def get_percentile(
+    conn, lift: str, sex: str, bodyweight_kg: float, one_rm_kg: float, track: str
+) -> int:
     weight_class = assign_weight_class(bodyweight_kg, sex)
     with conn.cursor() as cur:
         cur.execute(
@@ -53,7 +55,10 @@ def get_percentile(conn, lift: str, sex: str, bodyweight_kg: float, one_rm_kg: f
     if row is None:
         log.warning(
             "no standard found for lift=%s sex=%s weight_class=%s track=%s — defaulting to 0",
-            lift, sex, weight_class, track,
+            lift,
+            sex,
+            weight_class,
+            track,
         )
         return 0
-    return row['percentile']
+    return row["percentile"]
