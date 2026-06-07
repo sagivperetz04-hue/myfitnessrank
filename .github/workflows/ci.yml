@@ -103,7 +103,7 @@ jobs:
 
       - name: Configure AWS credentials
         if: steps.aws-check.outputs.ready == 'true'
-        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e831c8b509e3500  # v4.0.2
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b  # v6.2.0
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
@@ -111,7 +111,7 @@ jobs:
       - name: Login to Amazon ECR
         if: steps.aws-check.outputs.ready == 'true'
         id: ecr-login
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076  # v2.0.1
+        uses: aws-actions/amazon-ecr-login@fa648b43de3d4d023bcb3f89ed6940096949c419  # v2.1.5
 
       - name: Push to ECR
         if: steps.aws-check.outputs.ready == 'true'
