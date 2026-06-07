@@ -12,30 +12,30 @@ from services.ranking import (
 )
 from services.leaderboard import get_top_lifters
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-_VALID_EXERCISES = ('squat', 'bench', 'deadlift', 'total')
+_VALID_EXERCISES = ("squat", "bench", "deadlift", "total")
 
 
 def _db():
-    if 'db' not in g:
+    if "db" not in g:
         g.db = get_connection()
     return g.db
 
 
 @app.teardown_appcontext
 def _close_db(exc):
-    conn = g.pop('db', None)
+    conn = g.pop("db", None)
     if conn is not None:
         if exc is not None and conn.closed == 0:
             conn.rollback()
         return_connection(conn)  # returns to pool; discards if broken
 
 
-@app.route('/health')
+@app.route("/health")
 def health():
     try:
         conn = _db()
@@ -47,38 +47,46 @@ def health():
     return jsonify({"status": "ok"}), 200
 
 
-@app.route('/api/rank', methods=['POST'])
+@app.route("/api/rank", methods=["POST"])
 def rank():
     body = request.get_json(silent=True) or {}
-    required = ('username', 'exercise', 'weight_kg', 'reps', 'bodyweight_kg', 'sex')
+    required = ("username", "exercise", "weight_kg", "reps", "bodyweight_kg", "sex")
     missing = [f for f in required if f not in body]
     if missing:
         return jsonify({"error": f"missing fields: {missing}"}), 400
 
-    exercise = body['exercise']
-    sex      = str(body['sex']).upper()
-    username = body['username']
+    exercise = body["exercise"]
+    sex = str(body["sex"]).upper()
+    username = body["username"]
 
     if not username or not str(username).strip():
         return jsonify({"error": "username must not be empty"}), 400
-    if sex not in ('M', 'F'):
+    if sex not in ("M", "F"):
         return jsonify({"error": "sex must be M or F"}), 400
     if exercise not in _VALID_EXERCISES:
         return jsonify({"error": f"exercise must be one of {_VALID_EXERCISES}"}), 400
 
     try:
-        weight_kg     = float(body['weight_kg'])
-        reps          = int(body['reps'])
-        bodyweight_kg = float(body['bodyweight_kg'])
+        weight_kg = float(body["weight_kg"])
+        reps = int(body["reps"])
+        bodyweight_kg = float(body["bodyweight_kg"])
     except (ValueError, TypeError):
-        return jsonify({"error": "weight_kg and bodyweight_kg must be numbers, reps must be an integer"}), 400
+        return jsonify(
+            {
+                "error": "weight_kg and bodyweight_kg must be numbers, reps must be an integer"
+            }
+        ), 400
 
     if weight_kg <= 0 or bodyweight_kg <= 0 or reps <= 0:
-        return jsonify({"error": "weight_kg, bodyweight_kg, and reps must be positive"}), 400
+        return jsonify(
+            {"error": "weight_kg, bodyweight_kg, and reps must be positive"}
+        ), 400
     if reps > 20:
-        return jsonify({"error": "reps must be 20 or fewer — Epley formula is unreliable above 20"}), 400
+        return jsonify(
+            {"error": "reps must be 20 or fewer — Epley formula is unreliable above 20"}
+        ), 400
 
-    one_rm_kg    = calculate_1rm(weight_kg, reps)
+    one_rm_kg = calculate_1rm(weight_kg, reps)
     weight_class = assign_weight_class(bodyweight_kg, sex)
 
     try:
@@ -90,12 +98,16 @@ def rank():
                 (username,),
             )
             cur.execute("SELECT id FROM users WHERE username = %s", (username,))
-            user_id = cur.fetchone()['id']
+            user_id = cur.fetchone()["id"]
 
-        comp_percentile = get_percentile(conn, exercise, sex, bodyweight_kg, one_rm_kg, 'competition')
-        comp_tier       = assign_tier(comp_percentile)
-        avg_percentile  = get_percentile(conn, exercise, sex, bodyweight_kg, one_rm_kg, 'world_avg')
-        avg_tier        = assign_tier(avg_percentile)
+        comp_percentile = get_percentile(
+            conn, exercise, sex, bodyweight_kg, one_rm_kg, "competition"
+        )
+        comp_tier = assign_tier(comp_percentile)
+        avg_percentile = get_percentile(
+            conn, exercise, sex, bodyweight_kg, one_rm_kg, "world_avg"
+        )
+        avg_tier = assign_tier(avg_percentile)
 
         with conn.cursor() as cur:
             cur.execute(
@@ -107,10 +119,20 @@ def rank():
                    world_avg_percentile, world_avg_tier)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (user_id, exercise, weight_kg, reps, one_rm_kg,
-                 bodyweight_kg, sex, weight_class,
-                 comp_percentile, comp_tier,
-                 avg_percentile, avg_tier),
+                (
+                    user_id,
+                    exercise,
+                    weight_kg,
+                    reps,
+                    one_rm_kg,
+                    bodyweight_kg,
+                    sex,
+                    weight_class,
+                    comp_percentile,
+                    comp_tier,
+                    avg_percentile,
+                    avg_tier,
+                ),
             )
             conn.commit()
     except Exception as exc:
@@ -119,28 +141,34 @@ def rank():
 
     log.info(
         "ranked user=%s exercise=%s 1rm=%.1f comp=%d(%s) world_avg=%d(%s)",
-        username, exercise, one_rm_kg,
-        comp_percentile, comp_tier,
-        avg_percentile, avg_tier,
+        username,
+        exercise,
+        one_rm_kg,
+        comp_percentile,
+        comp_tier,
+        avg_percentile,
+        avg_tier,
     )
 
-    return jsonify({
-        "one_rm_kg":       one_rm_kg,
-        "weight_class_kg": weight_class,
-        "competition":     {"percentile": comp_percentile, "tier": comp_tier},
-        "world_avg":       {"percentile": avg_percentile,  "tier": avg_tier},
-    }), 200
+    return jsonify(
+        {
+            "one_rm_kg": one_rm_kg,
+            "weight_class_kg": weight_class,
+            "competition": {"percentile": comp_percentile, "tier": comp_tier},
+            "world_avg": {"percentile": avg_percentile, "tier": avg_tier},
+        }
+    ), 200
 
 
-@app.route('/api/users/<username>/history', methods=['GET'])
+@app.route("/api/users/<username>/history", methods=["GET"])
 def user_history(username):
-    exercise = request.args.get('exercise')
+    exercise = request.args.get("exercise")
     if exercise and exercise not in _VALID_EXERCISES:
         return jsonify({"error": f"exercise must be one of {_VALID_EXERCISES}"}), 400
 
     try:
-        limit  = min(int(request.args.get('limit',  20)), 100)
-        offset = max(int(request.args.get('offset',  0)),   0)
+        limit = min(int(request.args.get("limit", 20)), 100)
+        offset = max(int(request.args.get("offset", 0)), 0)
     except (ValueError, TypeError):
         return jsonify({"error": "limit and offset must be integers"}), 400
 
@@ -167,7 +195,7 @@ def user_history(username):
                     ORDER BY logged_at DESC
                     LIMIT %s OFFSET %s
                     """,
-                    (user['id'], exercise, limit, offset),
+                    (user["id"], exercise, limit, offset),
                 )
             else:
                 cur.execute(
@@ -182,20 +210,22 @@ def user_history(username):
                     ORDER BY logged_at DESC
                     LIMIT %s OFFSET %s
                     """,
-                    (user['id'], limit, offset),
+                    (user["id"], limit, offset),
                 )
             rows = cur.fetchall()
     except Exception as exc:
         log.error("db error in /api/users/history: %s", exc)
         return jsonify({"error": "database error"}), 500
 
-    return jsonify({
-        "username": username,
-        "logs": [_format_log(r) for r in rows],
-    }), 200
+    return jsonify(
+        {
+            "username": username,
+            "logs": [_format_log(r) for r in rows],
+        }
+    ), 200
 
 
-@app.route('/api/users/<username>/best', methods=['GET'])
+@app.route("/api/users/<username>/best", methods=["GET"])
 def user_best(username):
     try:
         conn = _db()
@@ -219,26 +249,28 @@ def user_best(username):
                 WHERE user_id = %s
                 ORDER BY exercise, one_rm_kg DESC
                 """,
-                (user['id'],),
+                (user["id"],),
             )
             rows = cur.fetchall()
     except Exception as exc:
         log.error("db error in /api/users/best: %s", exc)
         return jsonify({"error": "database error"}), 500
 
-    return jsonify({
-        "username": username,
-        "bests": {r['exercise']: _format_log(r) for r in rows},
-    }), 200
+    return jsonify(
+        {
+            "username": username,
+            "bests": {r["exercise"]: _format_log(r) for r in rows},
+        }
+    ), 200
 
 
-@app.route('/api/leaderboard', methods=['GET'])
+@app.route("/api/leaderboard", methods=["GET"])
 def leaderboard():
-    sex          = (request.args.get('sex') or '').upper()
-    weight_class = request.args.get('weight_class', '')
-    lift         = request.args.get('lift', '')
+    sex = (request.args.get("sex") or "").upper()
+    weight_class = request.args.get("weight_class", "")
+    lift = request.args.get("lift", "")
 
-    if sex not in ('M', 'F'):
+    if sex not in ("M", "F"):
         return jsonify({"error": "sex must be M or F"}), 400
     if lift not in _VALID_EXERCISES:
         return jsonify({"error": f"lift must be one of {_VALID_EXERCISES}"}), 400
@@ -256,18 +288,24 @@ def leaderboard():
 
 def _format_log(row) -> dict:
     return {
-        "exercise":        row['exercise'],
-        "weight_kg":       float(row['weight_kg']),
-        "reps":            row['reps'],
-        "one_rm_kg":       float(row['one_rm_kg']),
-        "bodyweight_kg":   float(row['bodyweight_kg']),
-        "sex":             row['sex'],
-        "weight_class_kg": row['weight_class_kg'],
-        "competition":     {"percentile": row['competition_percentile'], "tier": row['competition_tier']},
-        "world_avg":       {"percentile": row['world_avg_percentile'],   "tier": row['world_avg_tier']},
-        "logged_at":       row['logged_at'].isoformat(),
+        "exercise": row["exercise"],
+        "weight_kg": float(row["weight_kg"]),
+        "reps": row["reps"],
+        "one_rm_kg": float(row["one_rm_kg"]),
+        "bodyweight_kg": float(row["bodyweight_kg"]),
+        "sex": row["sex"],
+        "weight_class_kg": row["weight_class_kg"],
+        "competition": {
+            "percentile": row["competition_percentile"],
+            "tier": row["competition_tier"],
+        },
+        "world_avg": {
+            "percentile": row["world_avg_percentile"],
+            "tier": row["world_avg_tier"],
+        },
+        "logged_at": row["logged_at"].isoformat(),
     }
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
