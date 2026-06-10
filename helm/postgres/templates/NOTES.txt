@@ -1,0 +1,18 @@
+MyFitnessRank PostgreSQL deployed.
+
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+Image:     {{ .Values.image.repository }}:{{ .Values.image.tag }}
+
+Schema and global_standards seed run automatically on FIRST boot only
+(initdb scripts are skipped when the data volume is already initialized).
+
+Connection (in-cluster):
+  host: {{ include "postgres.fullname" . }}.{{ .Release.Namespace }}.svc
+  port: {{ .Values.service.port }}
+
+Requires secret "{{ .Values.existingSecret }}" (keys: username, password, database)
+to exist in namespace {{ .Release.Namespace }} before the pod becomes ready.
+
+Check status:
+  kubectl -n {{ .Release.Namespace }} rollout status statefulset/{{ include "postgres.fullname" . }}

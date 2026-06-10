@@ -1,0 +1,51 @@
+replicaCount: 2
+
+image:
+  repository: myfitnessrank-frontend
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# For ECR: [{ name: ecr-registry-secret }]
+imagePullSecrets: []
+
+# URL nginx proxies /api/ requests to — the backend service in the same namespace
+backendUrl: http://backend:5000
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  # Empty host = catch-all rule; with the local kind cluster the app is
+  # reachable at http://localhost:8080
+  host: ""
+  path: /
+  pathType: Prefix
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+probes:
+  readiness:
+    initialDelaySeconds: 3
+    periodSeconds: 10
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 20
