@@ -1,0 +1,20 @@
+# App-of-apps: the only Application applied by hand (kubectl apply -f).
+# It syncs deploy/argocd/apps/, which defines one Application per service.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myfitnessrank-root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
+    targetRevision: feature/RND-001-add-claude-project-config
+    path: deploy/argocd/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
