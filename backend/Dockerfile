@@ -35,7 +35,8 @@ COPY --chown=appuser:appuser services/ ./services/
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-USER appuser
+# Numeric so K8s runAsNonRoot can verify the user is non-root
+USER 1000:1000
 
 EXPOSE 5000
 
