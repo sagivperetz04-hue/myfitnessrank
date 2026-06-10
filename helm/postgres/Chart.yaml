@@ -1,0 +1,6 @@
+apiVersion: v2
+name: postgres
+description: MyFitnessRank PostgreSQL — schema and global standards seeded on first boot
+type: application
+version: 0.1.0
+appVersion: "15.18"

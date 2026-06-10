@@ -1,0 +1,56 @@
+replicaCount: 2
+
+image:
+  repository: myfitnessrank-backend
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# For ECR: [{ name: ecr-registry-secret }]
+imagePullSecrets: []
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 5000
+
+# Disabled by default: the frontend nginx proxies /api/ to this service,
+# so the API has no reason to be reachable from outside the cluster.
+ingress:
+  enabled: false
+  className: nginx
+  host: api.myfitnessrank.local
+  path: /
+  pathType: Prefix
+
+db:
+  # Service name of the postgres release in the same namespace
+  host: postgres
+  port: 5432
+  # Secret with keys: username, password, database — created out-of-band,
+  # never committed to git
+  existingSecret: fitrank-db-credentials
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+probes:
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 20
