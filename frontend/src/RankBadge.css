@@ -10,17 +10,17 @@
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #888;
+  color: #9a9aa8;
   margin-bottom: 10px;
 }
 
-/* Badge container — starts invisible, animates in */
+/* Plate starts above the card and slams down like a dropped bumper plate */
 .rb-box {
   position: relative;
-  width: 110px;
-  height: 132px;
+  width: 116px;
+  height: 120px;
   opacity: 0;
-  transform: scale(0.25) translateY(40px);
+  transform: translateY(-70px) scale(1.05);
 }
 
 .rb-box svg {
@@ -30,31 +30,54 @@
 }
 
 .rb-box.rb-revealed {
-  animation: rbBounce 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation: rbSlam 0.7s cubic-bezier(0.5, 0, 0.6, 1) forwards;
 }
 
-@keyframes rbBounce {
-  0%   { opacity: 0; transform: scale(0.25) translateY(40px); filter: brightness(5); }
-  55%  { opacity: 1; transform: scale(1.12) translateY(-6px); filter: brightness(1.6); }
-  75%  { transform: scale(0.96) translateY(2px);  filter: brightness(1); }
-  100% { opacity: 1; transform: scale(1)    translateY(0);    filter: brightness(1); }
+.rb-box.rb-revealed svg {
+  animation: rbFloat 3.2s ease-in-out 1.2s infinite alternate;
 }
 
-/* Expanding glow ring on reveal */
+@keyframes rbSlam {
+  0%   { opacity: 0; transform: translateY(-70px) scale(1.05); }
+  45%  { opacity: 1; transform: translateY(0)     scale(1); }
+  58%  { transform: translateY(0) scaleX(1.12) scaleY(0.88); }
+  74%  { transform: translateY(-10px) scale(1); }
+  88%  { transform: translateY(0) scaleX(1.04) scaleY(0.97); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes rbFloat {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-4px); }
+}
+
+/* Elite plates never stop glowing */
+.rb-box.rb-elite svg {
+  animation: rbFloat 3.2s ease-in-out 1.2s infinite alternate,
+             rbElitePulse 2s ease-in-out 1.2s infinite alternate;
+}
+
+@keyframes rbElitePulse {
+  from { filter: drop-shadow(0 6px 16px color-mix(in srgb, var(--tc) 45%, transparent)); }
+  to   { filter: drop-shadow(0 6px 26px color-mix(in srgb, var(--tc) 85%, transparent)); }
+}
+
+/* Impact shockwave ring on the slam */
 .rb-glow {
   position: absolute;
   inset: -15px;
   border-radius: 50%;
   border: 3px solid var(--tc);
-  animation: rbGlowRing 0.9s ease-out forwards;
+  animation: rbGlowRing 0.8s ease-out 0.3s forwards;
+  opacity: 0;
   pointer-events: none;
   z-index: 1;
 }
 
 @keyframes rbGlowRing {
-  0%   { transform: scale(0.4); opacity: 1;   box-shadow: 0 0 12px var(--tc); }
+  0%   { transform: scale(0.5); opacity: 1;   box-shadow: 0 0 14px var(--tc); }
   60%  { opacity: 0.7; }
-  100% { transform: scale(2.6); opacity: 0;   box-shadow: 0 0 0 var(--tc); }
+  100% { transform: scale(2.4); opacity: 0;   box-shadow: 0 0 0 var(--tc); }
 }
 
 /* Tier name + percentile below badge */
@@ -65,7 +88,7 @@
 }
 
 .rb-info.rb-revealed {
-  animation: rbFadeUp 0.4s ease 0.45s forwards;
+  animation: rbFadeUp 0.4s ease 0.5s forwards;
 }
 
 @keyframes rbFadeUp {
@@ -76,12 +99,13 @@
   display: block;
   font-size: 1.05rem;
   font-weight: 800;
+  font-style: italic;
   letter-spacing: 0.14em;
 }
 
 .rb-pct {
   display: block;
   font-size: 0.78rem;
-  color: #888;
+  color: #9a9aa8;
   margin-top: 3px;
 }
