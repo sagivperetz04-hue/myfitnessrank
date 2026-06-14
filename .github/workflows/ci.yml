@@ -24,10 +24,10 @@ jobs:
         run: pip install ruff==0.6.9
 
       - name: ruff check
-        run: ruff check backend/
+        run: ruff check backend/ auth/
 
       - name: ruff format check
-        run: ruff format --check backend/
+        run: ruff format --check backend/ auth/
 
   # ── 2. Test ────────────────────────────────────────────────────────────────
   test:
@@ -66,6 +66,30 @@ jobs:
         working-directory: backend
         run: pytest -v
 
+  # ── 2b. Test Auth ──────────────────────────────────────────────────────────
+  test-auth:
+    name: Test Auth
+    needs: lint
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: auth/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r auth/requirements.txt pytest
+
+      - name: Run tests
+        working-directory: auth
+        env:
+          JWT_SIGNING_KEY: test-signing-key-not-for-prod
+        run: pytest -v
+
   # ── 3. Frontend ────────────────────────────────────────────────────────────
   frontend:
     name: Frontend Lint & Test
@@ -99,7 +123,7 @@ jobs:
   # ── 4. Build & Push ────────────────────────────────────────────────────────
   build:
     name: Build & Push
-    needs: [test, frontend]
+    needs: [test, test-auth, frontend]
     runs-on: ubuntu-24.04
 
     permissions:
@@ -110,12 +134,19 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 
       # Validates Dockerfile on every branch; confirms the image builds correctly
-      - name: Build Docker image
+      - name: Build backend Docker image
         run: |
           docker build \
             --no-cache \
             --tag myfitnessrank/backend:${{ github.sha }} \
             backend/
+
+      - name: Build auth Docker image
+        run: |
+          docker build \
+            --no-cache \
+            --tag myfitnessrank/auth:${{ github.sha }} \
+            auth/
 
       # Checks whether AWS secrets are configured. Secrets cannot be referenced
       # in if: expressions directly — expose via step output instead.

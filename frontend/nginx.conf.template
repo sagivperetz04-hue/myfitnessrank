@@ -34,7 +34,17 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # Proxy API calls to the backend service
+    # Auth calls go to the auth service. More specific than /api/ below, so
+    # nginx's longest-prefix match routes /api/auth/* here.
+    location /api/auth/ {
+        proxy_pass        ${AUTH_URL};
+        proxy_set_header  Host              $host;
+        proxy_set_header  X-Real-IP         $remote_addr;
+        proxy_set_header  X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header  X-Forwarded-Proto $scheme;
+    }
+
+    # Proxy remaining API calls to the backend service
     location /api/ {
         proxy_pass        ${BACKEND_URL};
         proxy_set_header  Host              $host;

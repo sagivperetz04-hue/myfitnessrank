@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { RankBadge } from './RankBadge'
 import { TIER_COLORS } from './tiers'
+import { LoginPage } from './LoginPage'
+import { logout, restoreSession } from './auth'
 
 const EXERCISES = ['squat', 'bench', 'deadlift', 'total']
 
@@ -338,14 +340,14 @@ function HistoryView({ username }) {
   )
 }
 
-export default function App() {
-  const [username, setUsername] = useState(
-    () => localStorage.getItem('mfr_username') ?? ''
-  )
-  const [draftUsername, setDraftUsername] = useState(username)
+// The ranking app shell. `editable` username = guest mode (browser-local
+// identity); a fixed identity = online mode (the signed-in account).
+function RankApp({ identity, editable, onExit, exitLabel }) {
+  const [username, setUsername] = useState(identity)
+  const [draftUsername, setDraftUsername] = useState(identity)
   const [view, setView] = useState('log')
   const [result, setResult] = useState(null)
-  const [intro, setIntro] = useState(() => Boolean(localStorage.getItem('mfr_username')))
+  const [intro, setIntro] = useState(() => Boolean(identity))
 
   function saveUsername(e) {
     e.preventDefault()
@@ -362,21 +364,26 @@ export default function App() {
 
       <header>
         <h1><span className="logo-emoji">🏋️</span> MyFitnessRank</h1>
-        <form className="username-form" onSubmit={saveUsername}>
-          <input
-            type="text"
-            placeholder="Username"
-            aria-label="Username"
-            value={draftUsername}
-            onChange={(e) => setDraftUsername(e.target.value)}
-          />
-          <button type="submit">Set</button>
-        </form>
+        {editable && (
+          <form className="username-form" onSubmit={saveUsername}>
+            <input
+              type="text"
+              placeholder="Username"
+              aria-label="Username"
+              value={draftUsername}
+              onChange={(e) => setDraftUsername(e.target.value)}
+            />
+            <button type="submit">Set</button>
+          </form>
+        )}
         {username && (
           <span className="active-user">
             <span className="user-dot"/> Logged in as <strong>{username}</strong>
           </span>
         )}
+        <button type="button" className="exit-btn" onClick={onExit}>
+          {exitLabel}
+        </button>
       </header>
 
       <nav>
@@ -414,5 +421,75 @@ export default function App() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function App() {
+  // null = no choice yet (show login page); 'guest' | 'online' otherwise
+  const [mode, setMode] = useState(() => localStorage.getItem('mfr_mode'))
+  const [account, setAccount] = useState(null)
+  const [checking, setChecking] = useState(() => localStorage.getItem('mfr_mode') === 'online')
+
+  // On reload in online mode, trade the HttpOnly refresh cookie for a session.
+  useEffect(() => {
+    if (mode !== 'online') return
+    let active = true
+    restoreSession()
+      .then((user) => { if (active) setAccount(user) })
+      .catch(() => { if (active) setAccount(null) })
+      .finally(() => { if (active) setChecking(false) })
+    return () => { active = false }
+  }, [mode])
+
+  function chooseGuest() {
+    localStorage.setItem('mfr_mode', 'guest')
+    setMode('guest')
+  }
+
+  function onAuthed(user) {
+    localStorage.setItem('mfr_mode', 'online')
+    setAccount(user)
+    setChecking(false)
+    setMode('online')
+  }
+
+  async function exitOnline() {
+    await logout()
+    setAccount(null)
+    localStorage.removeItem('mfr_mode')
+    setMode(null)
+  }
+
+  function exitGuest() {
+    localStorage.removeItem('mfr_mode')
+    setMode(null)
+  }
+
+  if (mode === 'online' && checking) {
+    return <div className="app"><p className="hint">Restoring session…</p></div>
+  }
+  if (!mode) {
+    return <LoginPage onGuest={chooseGuest} onAuthed={onAuthed}/>
+  }
+  if (mode === 'online' && !account) {
+    return <LoginPage onGuest={chooseGuest} onAuthed={onAuthed} forceOnline/>
+  }
+  if (mode === 'online') {
+    return (
+      <RankApp
+        identity={account.username}
+        editable={false}
+        onExit={exitOnline}
+        exitLabel="Log out"
+      />
+    )
+  }
+  return (
+    <RankApp
+      identity={localStorage.getItem('mfr_username') ?? ''}
+      editable
+      onExit={exitGuest}
+      exitLabel="Exit guest"
+    />
   )
 }

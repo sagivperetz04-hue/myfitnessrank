@@ -1,0 +1,68 @@
+replicaCount: 2
+
+image:
+  repository: myfitnessrank-auth
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# For ECR: [{ name: ecr-registry-secret }]
+imagePullSecrets: []
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 5000
+
+# Disabled by default: the frontend nginx proxies /api/auth/ to this service,
+# so the auth API has no reason to be reachable from outside the cluster.
+ingress:
+  enabled: false
+  className: nginx
+  host: auth.myfitnessrank.local
+  path: /
+  pathType: Prefix
+
+db:
+  # Service name of the dedicated auth postgres release in the same namespace
+  host: postgres-auth
+  port: 5432
+  # Secret with keys: username, password, database — created out-of-band,
+  # never committed to git
+  existingSecret: auth-db-credentials
+
+# Secret holding the HS256 JWT signing key (key: signing-key) — created
+# out-of-band, shared with services that must verify access tokens.
+jwt:
+  existingSecret: jwt-signing-key
+  secretKey: signing-key
+
+# Secure cookies are accepted by modern browsers on http://localhost, so the
+# refresh cookie stays Secure by default. Set false only for non-localhost http.
+cookieSecure: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+probes:
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 20

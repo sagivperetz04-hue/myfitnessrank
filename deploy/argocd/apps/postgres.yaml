@@ -9,7 +9,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
-    targetRevision: feature/RND-001-add-claude-project-config
+    targetRevision: feature/RND-002-auth-service
     path: helm/postgres
   destination:
     server: https://kubernetes.default.svc
