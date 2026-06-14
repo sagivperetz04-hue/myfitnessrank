@@ -1,0 +1,48 @@
+image:
+  repository: postgres
+  tag: "15.18-alpine"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+service:
+  enabled: true
+  port: 5432
+
+# Secret with keys: username, password, database — created out-of-band,
+# never committed to git
+existingSecret: auth-db-credentials
+
+persistence:
+  size: 1Gi
+  # Empty = cluster default StorageClass ("standard" on kind)
+  storageClassName: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# postgres user/group in the alpine image
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 70
+  runAsGroup: 70
+  fsGroup: 70
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+probes:
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 20

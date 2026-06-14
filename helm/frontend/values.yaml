@@ -2,7 +2,7 @@ replicaCount: 2
 
 image:
   repository: myfitnessrank-frontend
-  tag: "0.1.0"
+  tag: "0.1.1"
   pullPolicy: IfNotPresent
 
 # For ECR: [{ name: ecr-registry-secret }]
@@ -10,6 +10,9 @@ imagePullSecrets: []
 
 # URL nginx proxies /api/ requests to — the backend service in the same namespace
 backendUrl: http://backend:5000
+
+# URL nginx proxies /api/auth/ requests to — the auth service in the same namespace
+authUrl: http://auth:5000
 
 service:
   enabled: true

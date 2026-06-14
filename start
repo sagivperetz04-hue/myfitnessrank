@@ -77,6 +77,7 @@ build_and_load() {
 
 build_and_load myfitnessrank-backend backend
 build_and_load myfitnessrank-frontend frontend
+build_and_load myfitnessrank-auth auth
 
 kubectl get namespace "$APP_NS" >/dev/null 2>&1 || kubectl create namespace "$APP_NS"
 
@@ -88,6 +89,23 @@ if ! kubectl -n "$APP_NS" get secret fitrank-db-credentials >/dev/null 2>&1; the
     --from-literal=username=fitrank \
     --from-literal=password="$(openssl rand -hex 16)" \
     --from-literal=database=fitrank
+fi
+
+# Create-once: the auth postgres' PVC keeps the password it was initialized with,
+# so regenerating this secret would lock the auth service out of its existing DB
+if ! kubectl -n "$APP_NS" get secret auth-db-credentials >/dev/null 2>&1; then
+  log "Creating auth DB credentials secret"
+  kubectl -n "$APP_NS" create secret generic auth-db-credentials \
+    --from-literal=username=fitauth \
+    --from-literal=password="$(openssl rand -hex 16)" \
+    --from-literal=database=fitauth
+fi
+
+# Create-once: rotating the JWT signing key would invalidate every issued token
+if ! kubectl -n "$APP_NS" get secret jwt-signing-key >/dev/null 2>&1; then
+  log "Creating JWT signing key secret"
+  kubectl -n "$APP_NS" create secret generic jwt-signing-key \
+    --from-literal=signing-key="$(openssl rand -hex 32)"
 fi
 
 log "Applying ArgoCD root app"
@@ -111,7 +129,7 @@ wait_created() {
 }
 
 log "Waiting for ArgoCD to sync the app (first sync can take a few minutes)"
-for workload in statefulset/postgres deployment/backend deployment/frontend; do
+for workload in statefulset/postgres statefulset/postgres-auth deployment/auth deployment/backend deployment/frontend; do
   wait_created "$workload"
   kubectl -n "$APP_NS" rollout status "$workload" --timeout=300s
 done

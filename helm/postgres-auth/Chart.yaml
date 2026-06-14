@@ -1,0 +1,6 @@
+apiVersion: v2
+name: postgres-auth
+description: MyFitnessRank auth PostgreSQL — dedicated store for accounts and password hashes
+type: application
+version: 0.1.0
+appVersion: "15.18"
