@@ -7,8 +7,8 @@ class TestCalculate1RM:
     def test_epley_formula(self):
         assert calculate_1rm(100, 5) == 116.7
 
-    def test_single_rep(self):
-        assert calculate_1rm(100, 1) == 103.3
+    def test_single_rep_is_the_1rm_itself(self):
+        assert calculate_1rm(100, 1) == 100
 
     def test_rounds_to_one_decimal(self):
         assert calculate_1rm(75, 8) == round(75 * (1 + 8 / 30), 1)
@@ -31,13 +31,16 @@ class TestAssignWeightClass:
         assert assign_weight_class(120, "M") == 120
 
     def test_male_open_class(self):
-        assert assign_weight_class(121, "M") == 999
+        assert assign_weight_class(121, "M") == 140
+
+    def test_male_above_open_class(self):
+        assert assign_weight_class(200, "M") == 140
 
     def test_female_exact_boundary(self):
         assert assign_weight_class(63, "F") == 63
 
     def test_female_open_class(self):
-        assert assign_weight_class(85, "F") == 999
+        assert assign_weight_class(85, "F") == 100
 
 
 class TestAssignTier:

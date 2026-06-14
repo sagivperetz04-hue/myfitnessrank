@@ -19,6 +19,16 @@ app = Flask(__name__)
 
 _VALID_EXERCISES = ("squat", "bench", "deadlift", "total")
 
+# All-time world records (kg); must stay in sync with WORLD_RECORDS in
+# frontend/src/App.jsx — the browser check is UX, this one is the gate
+_WORLD_RECORDS_KG = {
+    "squat": 525,
+    "bench": 355,
+    "deadlift": 505,
+    "total": 1152.5,
+}
+_WR_MARGIN_KG = 2
+
 
 def _db():
     if "db" not in g:
@@ -84,6 +94,16 @@ def rank():
     if reps > 20:
         return jsonify(
             {"error": "reps must be 20 or fewer — Epley formula is unreliable above 20"}
+        ), 400
+    weight_cap_kg = _WORLD_RECORDS_KG[exercise] + _WR_MARGIN_KG
+    if weight_kg > weight_cap_kg:
+        return jsonify(
+            {
+                "error": (
+                    f"weight_kg must be at most {weight_cap_kg} kg for {exercise} "
+                    "— that would beat the world record"
+                )
+            }
         ), 400
 
     one_rm_kg = calculate_1rm(weight_kg, reps)
@@ -240,7 +260,7 @@ def user_best(username):
             cur.execute(
                 """
                 SELECT DISTINCT ON (exercise)
-                    exercise, weight_kg, reps, one_rm_kg,
+                    id, exercise, weight_kg, reps, one_rm_kg,
                     bodyweight_kg, sex, weight_class_kg,
                     competition_percentile, competition_tier,
                     world_avg_percentile, world_avg_tier,
@@ -288,6 +308,7 @@ def leaderboard():
 
 def _format_log(row) -> dict:
     return {
+        "id": row["id"],
         "exercise": row["exercise"],
         "weight_kg": float(row["weight_kg"]),
         "reps": row["reps"],

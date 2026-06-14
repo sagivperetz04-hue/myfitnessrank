@@ -15,13 +15,13 @@ are sex-specific because female bench is proportionally weaker than male bench).
 Run:  python3 scripts/generate_global_standards.py > scripts/seed_global_standards.sql
 """
 
+# The heaviest entry per sex is the open / super-heavyweight class ("120+" for M,
+# "84+" for F). It has no upper bound, so its key doubles as the reference bodyweight
+# used to compute its (higher than the bounded top class) standards.
 WEIGHT_CLASSES = {
-    "M": [59, 66, 74, 83, 93, 105, 120, 999],
-    "F": [47, 52, 57, 63, 69, 76, 84, 999],
+    "M": [59, 66, 74, 83, 93, 105, 120, 140],
+    "F": [47, 52, 57, 63, 69, 76, 84, 100],
 }
-
-# For the open (999) class, use these reference bodyweights
-OPEN_REF_KG = {"M": 120, "F": 84}
 
 # Squat 1RM bodyweight multipliers per sex / track / percentile.
 # world_avg: anchored to StrengthLevel beginner–elite tiers (48 M lifts).
@@ -54,7 +54,7 @@ def generate():
     rows = []
     for sex, classes in WEIGHT_CLASSES.items():
         for wc in classes:
-            ref_bw = OPEN_REF_KG[sex] if wc == 999 else wc
+            ref_bw = wc
             for track, pct_map in SQUAT_MULTIPLIERS[sex].items():
                 for lift, lift_scale in LIFT_SCALE[sex].items():
                     for pct in PERCENTILES:

@@ -2,9 +2,11 @@ import logging
 
 log = logging.getLogger(__name__)
 
+# Heaviest entry per sex is the open / super-heavyweight class ("120+" M, "84+" F);
+# it catches every bodyweight above the last bounded class.
 WEIGHT_CLASSES = {
-    "M": [59, 66, 74, 83, 93, 105, 120, 999],
-    "F": [47, 52, 57, 63, 69, 76, 84, 999],
+    "M": [59, 66, 74, 83, 93, 105, 120, 140],
+    "F": [47, 52, 57, 63, 69, 76, 84, 100],
 }
 
 # Descending order — first threshold the percentile meets wins
@@ -19,6 +21,9 @@ _TIER_MAP = [
 
 
 def calculate_1rm(weight_kg: float, reps: int) -> float:
+    # Epley estimates above the true 1RM at reps=1; a single rep IS the 1RM
+    if reps == 1:
+        return round(weight_kg, 1)
     return round(weight_kg * (1 + reps / 30), 1)
 
 
@@ -26,7 +31,7 @@ def assign_weight_class(bodyweight_kg: float, sex: str) -> int:
     for wc in WEIGHT_CLASSES[sex]:
         if bodyweight_kg <= wc:
             return wc
-    return 999
+    return WEIGHT_CLASSES[sex][-1]
 
 
 def assign_tier(percentile: int) -> str:

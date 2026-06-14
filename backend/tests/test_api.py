@@ -45,6 +45,12 @@ class TestRankHappyPath:
         data = client.post("/api/rank", json=VALID).get_json()
         assert data["one_rm_kg"] == 116.7
 
+    def test_1rm_at_one_rep_equals_weight(self, client):
+        data = client.post(
+            "/api/rank", json={**VALID, "weight_kg": 200, "reps": 1}
+        ).get_json()
+        assert data["one_rm_kg"] == 200
+
     def test_weight_class_for_85kg_male(self, client):
         data = client.post("/api/rank", json=VALID).get_json()
         assert data["weight_class_kg"] == 93
@@ -141,6 +147,37 @@ class TestRankValidation:
 
     def test_empty_body_returns_400(self, client):
         assert client.post("/api/rank", json={}).status_code == 400
+
+    def test_weight_above_world_record_cap_returns_400(self, client):
+        r = client.post(
+            "/api/rank", json={**VALID, "exercise": "deadlift", "weight_kg": 600}
+        )
+        assert r.status_code == 400
+        assert "world record" in r.get_json()["error"]
+
+    def test_weight_at_world_record_cap_accepted(self, client):
+        r = client.post(
+            "/api/rank",
+            json={**VALID, "exercise": "deadlift", "weight_kg": 507, "reps": 1},
+        )
+        assert r.status_code == 200
+
+    def test_cap_is_per_exercise(self, client):
+        # 400 kg is a legal deadlift but an impossible bench
+        assert (
+            client.post(
+                "/api/rank",
+                json={**VALID, "exercise": "bench", "weight_kg": 400},
+            ).status_code
+            == 400
+        )
+        assert (
+            client.post(
+                "/api/rank",
+                json={**VALID, "exercise": "deadlift", "weight_kg": 400, "reps": 1},
+            ).status_code
+            == 200
+        )
 
 
 # ── GET /api/users/<username>/history ────────────────────────────────────────
