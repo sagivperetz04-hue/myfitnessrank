@@ -19,6 +19,10 @@ for tool in docker kind; do
   command -v "$tool" >/dev/null || die "$tool not found on PATH"
 done
 
+# The ArgoCD UI port-forward is a detached background process that outlives the
+# node, so stop it here rather than leaving an orphan pointing at a dead cluster.
+pkill -f "port-forward svc/argocd-server 8081:443" 2>/dev/null || true
+
 if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
   log "Cluster '$CLUSTER' does not exist — nothing to do"
   exit 0

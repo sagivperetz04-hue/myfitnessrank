@@ -147,7 +147,17 @@ log "Reconciling global standards"
       sh -c 'psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null \
   || die "global standards re-seed failed"
 
+# A port-forward is process-bound and dies on host/cluster restart, so the
+# ArgoCD UI is unreachable after a reboot until it's relaunched. Reconcile it
+# here: drop any stale forwarder and start a fresh detached one.
+ARGOCD_PF_PORT=8081
+log "Starting ArgoCD UI port-forward (localhost:${ARGOCD_PF_PORT})"
+pkill -f "port-forward svc/argocd-server ${ARGOCD_PF_PORT}:443" 2>/dev/null || true
+nohup kubectl -n argocd port-forward svc/argocd-server "${ARGOCD_PF_PORT}:443" \
+  >/tmp/argocd-port-forward.log 2>&1 &
+disown
+
 log "Ready"
 echo "App:       http://localhost:8080"
-echo "ArgoCD UI: kubectl -n argocd port-forward svc/argocd-server 8081:443  ->  https://localhost:8081"
+echo "ArgoCD UI: https://localhost:${ARGOCD_PF_PORT}  (port-forward running in background; log: /tmp/argocd-port-forward.log)"
 echo "           user: admin   password: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
