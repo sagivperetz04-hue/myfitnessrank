@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Shuts the local environment down gracefully.
+#   ./shutdown            stops the cluster node; preserves the cluster + DB data (pairs with ./start)
+#   GRACE=120 ./shutdown  override the stop grace period (default 60s)
+#   DESTROY=1 ./shutdown  deletes the kind cluster entirely — ALL DATA LOST
+set -euo pipefail
+
+cd "$(dirname "$0")"
+export PATH="$HOME/.local/bin:$PATH"
+
+CLUSTER=myfitnessrank
+NODE="${CLUSTER}-control-plane"
+GRACE="${GRACE:-60}"
+
+log() { printf '\n==> %s\n' "$*"; }
+die() { echo "ERROR: $*" >&2; exit 1; }
+
+for tool in docker kind; do
+  command -v "$tool" >/dev/null || die "$tool not found on PATH"
+done
+
+if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
+  log "Cluster '$CLUSTER' does not exist — nothing to do"
+  exit 0
+fi
+
+if [ "${DESTROY:-0}" = 1 ]; then
+  echo "This DELETES the '$CLUSTER' cluster and every volume it holds (including the database)."
+  read -r -p "Type the cluster name to confirm: " reply
+  [ "$reply" = "$CLUSTER" ] || die "confirmation did not match — aborted"
+  log "Deleting kind cluster"
+  kind delete cluster --name "$CLUSTER"
+  log "Done — cluster removed"
+  exit 0
+fi
+
+if [ "$(docker inspect -f '{{.State.Running}}' "$NODE" 2>/dev/null)" != "true" ]; then
+  log "Cluster node already stopped — nothing to do"
+  exit 0
+fi
+
+# Stopping the node container sends SIGTERM to its init, which brings down kubelet
+# and containerd in order; postgres receives SIGTERM and flushes before exit.
+# The cluster and its PersistentVolumes survive, so ./start resumes from here.
+log "Stopping cluster node (grace ${GRACE}s)"
+docker stop -t "$GRACE" "$NODE" >/dev/null
+
+log "Stopped — data preserved. Run ./start to bring it back up."

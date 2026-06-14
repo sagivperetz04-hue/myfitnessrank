@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Brings up the full local environment (kind + ingress + ArgoCD + app).
+# Idempotent — safe to re-run anytime, e.g. after a host reboot.
+# REBUILD=1 ./start  rebuilds the app images and restarts the workloads.
+set -euo pipefail
+
+cd "$(dirname "$0")"
+export PATH="$HOME/.local/bin:$PATH"
+
+CLUSTER=myfitnessrank
+NODE="${CLUSTER}-control-plane"
+APP_NS=myfitnessrank
+INGRESS_MANIFEST=https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.15.1/deploy/static/provider/kind/deploy.yaml
+ARGOCD_MANIFEST=https://raw.githubusercontent.com/argoproj/argo-cd/v3.4.3/manifests/install.yaml
+
+log() { printf '\n==> %s\n' "$*"; }
+die() { echo "ERROR: $*" >&2; exit 1; }
+
+for tool in docker kind kubectl openssl; do
+  command -v "$tool" >/dev/null || die "$tool not found on PATH"
+done
+docker info >/dev/null 2>&1 || die "docker daemon is not running"
+
+if kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
+  # After a host reboot the kind node container still exists but is stopped
+  if [ "$(docker inspect -f '{{.State.Running}}' "$NODE")" != "true" ]; then
+    log "Starting stopped cluster node"
+    docker start "$NODE" >/dev/null
+  fi
+else
+  log "Creating kind cluster"
+  kind create cluster --config deploy/kind/kind-config.yaml
+fi
+
+kubectl config use-context "kind-${CLUSTER}" >/dev/null
+
+log "Waiting for Kubernetes API"
+for _ in $(seq 1 60); do
+  kubectl get --raw /readyz >/dev/null 2>&1 && break
+  sleep 2
+done
+kubectl get --raw /readyz >/dev/null 2>&1 || die "Kubernetes API did not become ready"
+
+if ! kubectl get namespace ingress-nginx >/dev/null 2>&1; then
+  log "Installing ingress-nginx"
+  kubectl apply -f "$INGRESS_MANIFEST"
+fi
+
+if ! kubectl get namespace argocd >/dev/null 2>&1; then
+  log "Installing ArgoCD"
+  kubectl create namespace argocd
+  # server-side: the ApplicationSet CRD exceeds the client-side annotation size limit
+  kubectl apply --server-side -n argocd -f "$ARGOCD_MANIFEST"
+fi
+
+image_in_node() {
+  docker exec "$NODE" crictl images -o json 2>/dev/null | grep -q "docker.io/library/$1\""
+}
+
+# The Helm values are the single source of truth for the image tag, so a chart
+# bump (e.g. backend 0.1.0 -> 0.1.1) can't drift from what ./start builds.
+chart_image_tag() {
+  awk '/^image:/{f=1} f && /tag:/{gsub(/[" ]/,"",$2); print $2; exit}' "helm/$1/values.yaml"
+}
+
+build_and_load() {
+  local repo=$1 dir=$2 version
+  version=$(chart_image_tag "$dir")
+  [ -n "$version" ] || die "could not read image tag from helm/$dir/values.yaml"
+  local tag="$repo:$version"
+  if [ "${REBUILD:-0}" = 1 ] || ! image_in_node "$tag"; then
+    log "Building and loading $tag"
+    docker build -t "$tag" "$dir"
+    kind load docker-image "$tag" --name "$CLUSTER"
+  fi
+}
+
+build_and_load myfitnessrank-backend backend
+build_and_load myfitnessrank-frontend frontend
+
+kubectl get namespace "$APP_NS" >/dev/null 2>&1 || kubectl create namespace "$APP_NS"
+
+# Create-once: postgres' PVC keeps the password it was initialized with,
+# so regenerating this secret would lock the backend out of the existing DB
+if ! kubectl -n "$APP_NS" get secret fitrank-db-credentials >/dev/null 2>&1; then
+  log "Creating DB credentials secret"
+  kubectl -n "$APP_NS" create secret generic fitrank-db-credentials \
+    --from-literal=username=fitrank \
+    --from-literal=password="$(openssl rand -hex 16)" \
+    --from-literal=database=fitrank
+fi
+
+log "Applying ArgoCD root app"
+kubectl apply -f deploy/argocd/root-app.yaml
+
+log "Waiting for ingress controller"
+kubectl -n ingress-nginx wait deployment/ingress-nginx-controller \
+  --for=condition=Available --timeout=300s
+
+if [ "${REBUILD:-0}" = 1 ]; then
+  log "Restarting workloads to pick up rebuilt images"
+  kubectl -n "$APP_NS" rollout restart deployment,statefulset 2>/dev/null || true
+fi
+
+wait_created() {
+  for _ in $(seq 1 60); do
+    kubectl -n "$APP_NS" get "$1" >/dev/null 2>&1 && return 0
+    sleep 5
+  done
+  die "$1 never appeared — check ArgoCD sync status"
+}
+
+log "Waiting for ArgoCD to sync the app (first sync can take a few minutes)"
+for workload in statefulset/postgres deployment/backend deployment/frontend; do
+  wait_created "$workload"
+  kubectl -n "$APP_NS" rollout status "$workload" --timeout=300s
+done
+
+log "Ready"
+echo "App:       http://localhost:8080"
+echo "ArgoCD UI: kubectl -n argocd port-forward svc/argocd-server 8081:443  ->  https://localhost:8081"
+echo "           user: admin   password: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
