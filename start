@@ -116,6 +116,19 @@ for workload in statefulset/postgres deployment/backend deployment/frontend; do
   kubectl -n "$APP_NS" rollout status "$workload" --timeout=300s
 done
 
+# initdb seeds global_standards only on a fresh PVC, so a persisted volume keeps
+# whatever it was first loaded with. Re-seed every run to reconcile the table to
+# the committed standards — TRUNCATE + INSERT in one transaction is idempotent.
+log "Reconciling global standards"
+{
+  echo "BEGIN;"
+  echo "TRUNCATE global_standards;"
+  cat backend/scripts/seed_global_standards.sql
+  echo "COMMIT;"
+} | kubectl -n "$APP_NS" exec -i postgres-0 -- \
+      sh -c 'psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null \
+  || die "global standards re-seed failed"
+
 log "Ready"
 echo "App:       http://localhost:8080"
 echo "ArgoCD UI: kubectl -n argocd port-forward svc/argocd-server 8081:443  ->  https://localhost:8081"
