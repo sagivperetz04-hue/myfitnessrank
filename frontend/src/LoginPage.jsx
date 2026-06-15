@@ -1,22 +1,62 @@
-import { useState } from 'react'
-import { emailValid, login, passwordProblems, signup } from './auth'
+import { useEffect, useState } from 'react'
+import {
+  emailValid,
+  login,
+  passwordProblems,
+  signup,
+  usernameAvailable,
+  usernameProblems,
+} from './auth'
 
-const DEFAULT = { email: '', password: '' }
+const DEFAULT = { email: '', username: '', password: '' }
 
 export function LoginPage({ onGuest, onAuthed, forceOnline = false }) {
   const [tab, setTab] = useState('login') // 'login' | 'signup'
   const [form, setForm] = useState(DEFAULT)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  // null | 'checking' | 'available' | 'taken'
+  const [usernameStatus, setUsernameStatus] = useState(null)
 
   function set(field) {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
   }
 
   const emailOk = emailValid(form.email)
-  // Only nag about password rules while signing up — login just checks the pair.
+  // Only enforce username/password rules while signing up — login just checks
+  // the email/password pair against the account.
+  const username = form.username.trim()
+  const unameProblems = tab === 'signup' ? usernameProblems(username) : []
   const pwProblems = tab === 'signup' ? passwordProblems(form.password) : []
-  const canSubmit = emailOk && form.password && pwProblems.length === 0
+  const canSubmit =
+    emailOk &&
+    form.password &&
+    pwProblems.length === 0 &&
+    (tab === 'login' || (unameProblems.length === 0 && usernameStatus === 'available'))
+
+  // Debounced live availability check. The unique constraint server-side is the
+  // real gate; this just tells the user before they submit.
+  useEffect(() => {
+    if (tab !== 'signup') return
+    if (usernameProblems(username).length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale status when the field becomes invalid
+      setUsernameStatus(null)
+      return
+    }
+    setUsernameStatus('checking')
+    const controller = new AbortController()
+    const t = setTimeout(() => {
+      usernameAvailable(username, controller.signal)
+        .then((ok) => setUsernameStatus(ok ? 'available' : 'taken'))
+        .catch((err) => {
+          if (err.name !== 'AbortError') setUsernameStatus(null)
+        })
+    }, 400)
+    return () => {
+      clearTimeout(t)
+      controller.abort()
+    }
+  }, [username, tab])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -26,7 +66,7 @@ export function LoginPage({ onGuest, onAuthed, forceOnline = false }) {
     try {
       const user =
         tab === 'signup'
-          ? await signup(form.email, form.password)
+          ? await signup(form.email, username, form.password)
           : await login(form.email, form.password)
       onAuthed(user)
     } catch (err) {
@@ -39,6 +79,7 @@ export function LoginPage({ onGuest, onAuthed, forceOnline = false }) {
   function switchTab(next) {
     setTab(next)
     setError(null)
+    setUsernameStatus(null)
   }
 
   return (
@@ -79,6 +120,33 @@ export function LoginPage({ onGuest, onAuthed, forceOnline = false }) {
           </label>
           {form.email && !emailOk && (
             <p className="field-hint">Enter a valid email address.</p>
+          )}
+
+          {tab === 'signup' && (
+            <>
+              <label>
+                Username
+                <input
+                  type="text"
+                  autoComplete="username"
+                  placeholder="Choose a username"
+                  value={form.username}
+                  onChange={set('username')}
+                />
+              </label>
+              {form.username && unameProblems.length > 0 && (
+                <p className="field-hint">Username needs {unameProblems.join(', ')}.</p>
+              )}
+              {unameProblems.length === 0 && usernameStatus === 'checking' && (
+                <p className="field-hint">Checking availability…</p>
+              )}
+              {unameProblems.length === 0 && usernameStatus === 'taken' && (
+                <p className="field-hint error">That username is taken.</p>
+              )}
+              {unameProblems.length === 0 && usernameStatus === 'available' && (
+                <p className="field-hint available">That username is available.</p>
+              )}
+            </>
           )}
 
           <label>

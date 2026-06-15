@@ -386,40 +386,42 @@ function RankApp({ identity, editable, onExit, exitLabel }) {
         </button>
       </header>
 
-      <nav>
-        <button
-          className={view === 'log' ? 'active' : ''}
-          onClick={() => setView('log')}
-        >
-          Log Lift
-        </button>
-        <button
-          className={view === 'history' ? 'active' : ''}
-          onClick={() => setView('history')}
-        >
-          History
-        </button>
-      </nav>
+      <div className="panel">
+        <nav>
+          <button
+            className={view === 'log' ? 'active' : ''}
+            onClick={() => setView('log')}
+          >
+            Log Lift
+          </button>
+          <button
+            className={view === 'history' ? 'active' : ''}
+            onClick={() => setView('history')}
+          >
+            History
+          </button>
+        </nav>
 
-      <main>
-        {/* key remount re-triggers the view slide-in on every tab switch */}
-        <div className="view" key={view}>
-          {view === 'log' && (
-            <>
-              {!username && <p className="hint">Set a username above to get started.</p>}
-              {username && (
-                <LiftForm
-                  username={username}
-                  onResult={(r) => setResult(r)}
-                />
-              )}
-              {result && <ResultCard result={result}/>}
-            </>
-          )}
+        <main>
+          {/* key remount re-triggers the view slide-in on every tab switch */}
+          <div className="view" key={view}>
+            {view === 'log' && (
+              <>
+                {!username && <p className="hint">Set a username above to get started.</p>}
+                {username && (
+                  <LiftForm
+                    username={username}
+                    onResult={(r) => setResult(r)}
+                  />
+                )}
+                {result && <ResultCard result={result}/>}
+              </>
+            )}
 
-          {view === 'history' && <HistoryView username={username}/>}
-        </div>
-      </main>
+            {view === 'history' && <HistoryView username={username}/>}
+          </div>
+        </main>
+      </div>
     </div>
   )
 }

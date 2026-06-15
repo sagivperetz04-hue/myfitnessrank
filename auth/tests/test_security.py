@@ -4,6 +4,7 @@ from services.security import (
     hash_password,
     is_valid_email,
     password_problems,
+    username_problems,
     verify_password,
 )
 
@@ -44,6 +45,26 @@ class TestPasswordPolicy:
     def test_collects_multiple_problems(self):
         # "squat" violates every rule: too short, no upper, no digit, no special
         assert len(password_problems("squat")) == 4
+
+
+class TestUsernamePolicy:
+    def test_accepts_simple_username(self):
+        assert username_problems("lifter") == []
+
+    def test_accepts_letters_digits_underscore(self):
+        assert username_problems("Squat_Master_99") == []
+
+    def test_flags_too_short(self):
+        assert "3 to 20 characters" in username_problems("ab")
+
+    def test_flags_too_long(self):
+        assert "3 to 20 characters" in username_problems("a" * 21)
+
+    def test_flags_illegal_characters(self):
+        assert "only letters, numbers, and underscores" in username_problems("bad name!")
+
+    def test_rejects_empty(self):
+        assert username_problems("") == ["3 to 20 characters"]
 
 
 class TestHashing:

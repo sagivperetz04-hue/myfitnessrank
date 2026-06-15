@@ -84,7 +84,10 @@ header h1 {
 
 .logo-emoji {
   font-style: normal;
-  -webkit-text-fill-color: initial;
+  /* Opaque fill so the emoji's own colors show — the brand <h1> sets text-fill
+     to transparent for its gradient, which would otherwise hide the glyph. */
+  -webkit-text-fill-color: #fff;
+  color: #fff;
   display: inline-block;
   animation: logoBounce 2.6s ease-in-out infinite;
 }
@@ -122,38 +125,46 @@ header h1 {
   50%      { box-shadow: 0 0 0 5px rgba(61, 220, 132, 0); }
 }
 
-/* ── nav ── */
+/* ── panel: the login-card surface, reused for the app body ── */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+  margin-top: 6px;
+}
+
+/* ── nav: segmented control matching the login tabs ── */
 nav {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin: 18px 0;
+  margin: 0 0 20px;
 }
 
 nav button {
-  background: var(--surface);
+  background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius);
   color: var(--muted);
-  padding: 8px 20px;
+  padding: 10px 20px;
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  transition: color 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.2s;
+  transition: color 0.15s, border-color 0.15s, box-shadow 0.2s;
 }
 
 nav button:hover {
-  transform: translateY(-2px);
   border-color: var(--accent);
   color: var(--text);
 }
 
 nav button.active {
-  background: linear-gradient(90deg, #ff3d2e, #ff7a00);
-  border-color: transparent;
-  color: #fff;
-  box-shadow: 0 4px 18px rgba(255, 61, 46, 0.35);
+  border-color: var(--accent);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--accent), 0 6px 20px rgba(255, 61, 46, 0.18);
 }
 
 /* ── view transitions ── */
@@ -184,12 +195,12 @@ label {
 }
 
 input, select {
-  background: var(--surface);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
   font-size: 0.95rem;
-  padding: 8px 10px;
+  padding: 9px 11px;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -251,8 +262,8 @@ button[type="submit"]:not(:disabled):active { transform: scale(0.97); }
 
 /* ── result ── */
 .result-card {
-  margin-top: 24px;
-  background: var(--surface);
+  margin-top: 22px;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-top: 3px solid;
   border-image: linear-gradient(90deg, #ff3d2e, #ffb302) 1;
@@ -274,7 +285,7 @@ button[type="submit"]:not(:disabled):active { transform: scale(0.97); }
 
 .stat {
   flex: 1;
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 14px;
@@ -581,6 +592,9 @@ button[type="submit"]:not(:disabled):active { transform: scale(0.97); }
   color: var(--accent);
   font-size: 0.82rem;
 }
+
+.field-hint.error    { color: var(--error); animation: none; }
+.field-hint.available { color: #3ddc84; }
 
 .guest-link {
   background: none;
