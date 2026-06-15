@@ -50,7 +50,10 @@
       "Bash(ruff format *)",
       "Bash(curl -s http://localhost:8080/health)",
       "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(kubectl get *)",
+      "Bash(kubectl cluster-info *)",
+      "Bash(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}')"
     ],
     "deny": [
       "Bash(terraform apply*)",
