@@ -1,5 +1,4 @@
 import os
-import re
 import logging
 
 import psycopg2
@@ -10,6 +9,7 @@ from services.security import (
     hash_password,
     is_valid_email,
     password_problems,
+    username_problems,
     verify_password,
 )
 from services.tokens import (
@@ -31,8 +31,6 @@ _REFRESH_COOKIE = "mfr_refresh"
 # on http://localhost); set COOKIE_SECURE=false only for non-localhost http.
 _COOKIE_PATH = "/api/auth"
 _COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() == "true"
-
-_USERNAME_SANITIZE_RE = re.compile(r"[^a-zA-Z0-9_]+")
 
 
 def _db():
@@ -62,19 +60,6 @@ def health():
     return jsonify({"status": "ok"}), 200
 
 
-def _derive_username(conn, email: str) -> str:
-    base = _USERNAME_SANITIZE_RE.sub("", email.split("@", 1)[0]) or "lifter"
-    candidate = base
-    suffix = 1
-    with conn.cursor() as cur:
-        while True:
-            cur.execute("SELECT 1 FROM accounts WHERE username = %s", (candidate,))
-            if cur.fetchone() is None:
-                return candidate
-            suffix += 1
-            candidate = f"{base}{suffix}"
-
-
 def _set_refresh_cookie(resp, account: dict):
     resp.set_cookie(
         _REFRESH_COOKIE,
@@ -102,21 +87,42 @@ def _session_response(account: dict, status: int):
     return resp, status
 
 
+@app.route("/api/auth/username-available", methods=["GET"])
+def username_available():
+    username = request.args.get("username", "").strip()
+    if username_problems(username):
+        return jsonify({"available": False}), 200
+    try:
+        conn = _db()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM accounts WHERE LOWER(username) = LOWER(%s)", (username,)
+            )
+            taken = cur.fetchone() is not None
+    except Exception as exc:
+        log.error("db error in /username-available: %s", exc)
+        return jsonify({"error": "database error"}), 500
+    return jsonify({"available": not taken}), 200
+
+
 @app.route("/api/auth/signup", methods=["POST"])
 def signup():
     body = request.get_json(silent=True) or {}
     email = str(body.get("email", "")).strip().lower()
+    username = str(body.get("username", "")).strip()
     password = str(body.get("password", ""))
 
     if not is_valid_email(email):
         return jsonify({"error": "enter a valid email address"}), 400
+    uname_problems = username_problems(username)
+    if uname_problems:
+        return jsonify({"error": "username needs " + ", ".join(uname_problems)}), 400
     problems = password_problems(password)
     if problems:
         return jsonify({"error": "password needs " + ", ".join(problems)}), 400
 
     try:
         conn = _db()
-        username = _derive_username(conn, email)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -128,8 +134,12 @@ def signup():
             )
             account = cur.fetchone()
         conn.commit()
-    except psycopg2.errors.UniqueViolation:
+    except psycopg2.errors.UniqueViolation as exc:
         conn.rollback()
+        # Tell the user which field collided instead of a generic conflict. The
+        # username gate is the LOWER(username) index; email is its own constraint.
+        if "username" in (exc.diag.constraint_name or ""):
+            return jsonify({"error": "that username is taken"}), 409
         return jsonify({"error": "an account with that email already exists"}), 409
     except Exception as exc:
         log.error("db error in /signup: %s", exc)

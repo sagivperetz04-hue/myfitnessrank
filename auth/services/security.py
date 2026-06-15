@@ -6,6 +6,10 @@ from argon2.exceptions import VerifyMismatchError
 # Mirrors the client-side check in the frontend; this one is the gate.
 EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
+# Username policy: 3-20 chars, letters/digits/underscore only.
+USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,20}$")
+_USERNAME_CHARSET_RE = re.compile(r"[^a-zA-Z0-9_]")
+
 # Password policy: >= 8 chars, >= 1 uppercase, >= 1 digit, >= 1 special.
 _MIN_LEN = 8
 _SPECIAL_RE = re.compile(r"[^A-Za-z0-9]")
@@ -17,6 +21,17 @@ _hasher = PasswordHasher()
 
 def is_valid_email(email: str) -> bool:
     return bool(EMAIL_RE.match(email or ""))
+
+
+def username_problems(username: str) -> list[str]:
+    """Return a list of human-readable policy violations; empty means valid."""
+    u = username or ""
+    problems = []
+    if not (3 <= len(u) <= 20):
+        problems.append("3 to 20 characters")
+    if u and _USERNAME_CHARSET_RE.search(u):
+        problems.append("only letters, numbers, and underscores")
+    return problems
 
 
 def password_problems(password: str) -> list[str]:

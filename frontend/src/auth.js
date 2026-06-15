@@ -26,6 +26,26 @@ export function passwordProblems(password) {
   return problems
 }
 
+// Mirrors username_problems in auth/services/security.py.
+export function usernameProblems(username) {
+  const u = username ?? ''
+  const problems = []
+  if (u.length < 3 || u.length > 20) problems.push('3 to 20 characters')
+  if (u && /[^a-zA-Z0-9_]/.test(u)) problems.push('only letters, numbers, and underscores')
+  return problems
+}
+
+// Live availability check for the signup form. The unique constraint on the
+// accounts table is the real gate — this is UX so the user knows before submit.
+export async function usernameAvailable(username, signal) {
+  const res = await fetch(
+    `/api/auth/username-available?username=${encodeURIComponent(username)}`,
+    { signal },
+  )
+  const data = await readJson(res)
+  return data.available
+}
+
 async function readJson(res) {
   let data = null
   try {
@@ -37,23 +57,23 @@ async function readJson(res) {
   return data
 }
 
-async function postCredentials(path, email, password) {
+async function postSession(path, body) {
   const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(body),
   })
   const data = await readJson(res)
   accessToken = data.access_token
   return data.user
 }
 
-export function signup(email, password) {
-  return postCredentials('/api/auth/signup', email, password)
+export function signup(email, username, password) {
+  return postSession('/api/auth/signup', { email, username, password })
 }
 
 export function login(email, password) {
-  return postCredentials('/api/auth/login', email, password)
+  return postSession('/api/auth/login', { email, password })
 }
 
 // Called on reload: exchanges the HttpOnly refresh cookie for a fresh access
