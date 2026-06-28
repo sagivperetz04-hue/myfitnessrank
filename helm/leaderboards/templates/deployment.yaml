@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "leaderboards.fullname" . }}
+  labels:
+    {{- include "leaderboards.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "leaderboards.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "leaderboards.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: leaderboards
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.db.existingSecret }}
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.db.existingSecret }}
+                  key: password
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.db.existingSecret }}
+                  key: database
+            - name: DATABASE_URL
+              value: "postgresql://$(DB_USER):$(DB_PASSWORD)@{{ .Values.db.host }}:{{ .Values.db.port }}/$(DB_NAME)"
+            - name: JWT_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.jwt.existingSecret }}
+                  key: {{ .Values.jwt.secretKey }}
+            - name: LEADERBOARD_ENC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.encryption.existingSecret }}
+                  key: {{ .Values.encryption.secretKey }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "postgres-leaderboards.fullname" . }}-initdb
+  labels:
+    {{- include "postgres-leaderboards.labels" . | nindent 4 }}
+data:
+  01-schema.sql: |
+{{ .Files.Get "files/initdb/01-schema.sql" | indent 4 }}
