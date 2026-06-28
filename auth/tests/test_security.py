@@ -61,7 +61,9 @@ class TestUsernamePolicy:
         assert "3 to 20 characters" in username_problems("a" * 21)
 
     def test_flags_illegal_characters(self):
-        assert "only letters, numbers, and underscores" in username_problems("bad name!")
+        assert "only letters, numbers, and underscores" in username_problems(
+            "bad name!"
+        )
 
     def test_rejects_empty(self):
         assert username_problems("") == ["3 to 20 characters"]
