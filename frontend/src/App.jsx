@@ -340,6 +340,95 @@ function HistoryView({ username }) {
   )
 }
 
+// Columns whose header sorts the board. The key is the API `sort` value; the
+// field is the property on each entry. Rank/Name/BW are display-only.
+const LB_COLUMNS = [
+  { key: 'squat',    label: 'Squat',    field: 'squat_kg' },
+  { key: 'bench',    label: 'Bench',    field: 'bench_kg' },
+  { key: 'deadlift', label: 'Deadlift', field: 'deadlift_kg' },
+  { key: 'total',    label: 'Total',    field: 'total_kg' },
+  { key: 'ratio',    label: 'Total/BW', field: 'bw_ratio' },
+]
+
+function LeaderboardView() {
+  const [sex, setSex] = useState('M')
+  const [sort, setSort] = useState('total')
+  const [entries, setEntries] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag must flip before the fetch resolves
+    setLoading(true)
+    setError(null)
+    fetch(`/api/leaderboards?sex=${sex}&sort=${sort}`, { signal: controller.signal })
+      .then(readJson)
+      .then((data) => {
+        setEntries(data.entries)
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (err.name === 'AbortError') return
+        setError(err.message)
+        setLoading(false)
+      })
+    return () => controller.abort()
+  }, [sex, sort])
+
+  return (
+    <div className="leaderboard">
+      <div className="lb-sex-toggle">
+        <button className={sex === 'M' ? 'active' : ''} onClick={() => setSex('M')}>Men</button>
+        <button className={sex === 'F' ? 'active' : ''} onClick={() => setSex('F')}>Women</button>
+      </div>
+
+      {loading && <p className="hint">Loading…</p>}
+      {error   && <p className="error" role="alert">{error}</p>}
+
+      {entries && entries.length === 0 && <p className="hint">No entries yet.</p>}
+
+      {entries && entries.length > 0 && (
+        <table className="history-table leaderboard-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>BW</th>
+              {LB_COLUMNS.map((col) => (
+                <th key={col.key} className={sort === col.key ? 'lb-active-col' : ''}>
+                  <button
+                    type="button"
+                    className="lb-sort"
+                    onClick={() => setSort(col.key)}
+                    aria-pressed={sort === col.key}
+                  >
+                    {col.label}{sort === col.key ? ' ▼' : ''}
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((e) => (
+              <tr key={e.rank}>
+                <td>{e.rank}</td>
+                <td>{e.name}</td>
+                <td>{e.bodyweight_kg.toFixed(1)}</td>
+                {LB_COLUMNS.map((col) => (
+                  <td key={col.key} className={sort === col.key ? 'lb-active-col' : ''}>
+                    {col.key === 'ratio' ? e[col.field].toFixed(2) : e[col.field].toFixed(1)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 // The ranking app shell. `editable` username = guest mode (browser-local
 // identity); a fixed identity = online mode (the signed-in account).
 function RankApp({ identity, editable, onExit, exitLabel }) {
@@ -400,6 +489,14 @@ function RankApp({ identity, editable, onExit, exitLabel }) {
           >
             History
           </button>
+          {!editable && (
+            <button
+              className={view === 'leaderboard' ? 'active' : ''}
+              onClick={() => setView('leaderboard')}
+            >
+              Leaderboard
+            </button>
+          )}
         </nav>
 
         <main>
@@ -419,6 +516,8 @@ function RankApp({ identity, editable, onExit, exitLabel }) {
             )}
 
             {view === 'history' && <HistoryView username={username}/>}
+
+            {view === 'leaderboard' && <LeaderboardView/>}
           </div>
         </main>
       </div>
