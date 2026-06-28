@@ -20,7 +20,9 @@ kubectl apply --server-side -n argocd -f https://raw.githubusercontent.com/argop
 # 4. App images (built locally, loaded into the kind node)
 docker build -t myfitnessrank-backend:0.1.0 backend/
 docker build -t myfitnessrank-frontend:0.1.0 frontend/
-kind load docker-image myfitnessrank-backend:0.1.0 myfitnessrank-frontend:0.1.0 --name myfitnessrank
+docker build -t myfitnessrank-leaderboards:0.1.0 leaderboards/
+kind load docker-image myfitnessrank-backend:0.1.0 myfitnessrank-frontend:0.1.0 \
+  myfitnessrank-leaderboards:0.1.0 --name myfitnessrank
 
 # 5. DB credentials — never committed to git
 kubectl create namespace myfitnessrank
@@ -28,6 +30,15 @@ kubectl -n myfitnessrank create secret generic fitrank-db-credentials \
   --from-literal=username=fitrank \
   --from-literal=password="$(openssl rand -hex 16)" \
   --from-literal=database=fitrank
+
+# 5b. Leaderboards service — own DB + Fernet key for encrypting lifter names.
+#     The shared jwt-signing-key secret (created with the auth service) is reused.
+kubectl -n myfitnessrank create secret generic leaderboards-db-credentials \
+  --from-literal=username=leaderboards \
+  --from-literal=password="$(openssl rand -hex 16)" \
+  --from-literal=database=leaderboards
+kubectl -n myfitnessrank create secret generic leaderboards-enc-key \
+  --from-literal=fernet-key="$(python -c 'from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())')"
 
 # 6. The only manual Application — everything else syncs from git
 kubectl apply -f deploy/argocd/root-app.yaml

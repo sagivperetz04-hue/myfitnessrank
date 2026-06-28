@@ -1,0 +1,76 @@
+replicaCount: 2
+
+image:
+  repository: myfitnessrank-leaderboards
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# For ECR: [{ name: ecr-registry-secret }]
+imagePullSecrets: []
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 5000
+
+# Disabled by default: the frontend nginx proxies /api/leaderboards/ to this
+# service, so the API has no reason to be reachable from outside the cluster.
+ingress:
+  enabled: false
+  className: nginx
+  host: leaderboards.myfitnessrank.local
+  path: /
+  pathType: Prefix
+
+db:
+  # Service name of the dedicated leaderboards postgres release in the same namespace
+  host: postgres-leaderboards
+  port: 5432
+  # Secret with keys: username, password, database — created out-of-band,
+  # never committed to git
+  existingSecret: leaderboards-db-credentials
+
+# Secret holding the HS256 JWT signing key (key: signing-key) — SHARED with the
+# auth service so this service can verify the access tokens auth issues.
+jwt:
+  existingSecret: jwt-signing-key
+  secretKey: signing-key
+
+# Secret holding the Fernet key that encrypts lifter names at rest
+# (key: fernet-key) — created out-of-band, never committed to git.
+encryption:
+  existingSecret: leaderboards-enc-key
+  secretKey: fernet-key
+
+# Post-install/upgrade Job that loads the committed seed_pool.csv into the DB,
+# encrypting names with the Fernet key. Idempotent (replaces source='seed' rows).
+seedJob:
+  enabled: true
+  backoffLimit: 3
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+probes:
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 20

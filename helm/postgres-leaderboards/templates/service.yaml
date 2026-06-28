@@ -1,0 +1,33 @@
+{{- if .Values.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "postgres-leaderboards.fullname" . }}
+  labels:
+    {{- include "postgres-leaderboards.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: postgres
+      protocol: TCP
+      name: postgres
+  selector:
+    {{- include "postgres-leaderboards.selectorLabels" . | nindent 4 }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "postgres-leaderboards.fullname" . }}-hl
+  labels:
+    {{- include "postgres-leaderboards.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: postgres
+      protocol: TCP
+      name: postgres
+  selector:
+    {{- include "postgres-leaderboards.selectorLabels" . | nindent 4 }}
