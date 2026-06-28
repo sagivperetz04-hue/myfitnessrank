@@ -77,6 +77,8 @@ Always show the command and wait for the user to run:
 - **Answer in order:** (1) solution, (2) short "why this works", (3) optional deep dive.
 - **No comments explaining WHAT the code does.** Only comment WHY if it's non-obvious.
 - **No speculative features.** Implement what was asked, nothing more.
+- **No new technologies.** Never introduce a new language, framework, library, tool, or service into the stack unless it is absolutely necessary or I explicitly asked for it. If it is necessary, stop and notify me first — explain why, and what it replaces or adds — and wait for my approval before adding it.
+- **No unsolicited documentation.** Do not create or write documentation (READMEs, docs files, comment blocks, guides) unless I specifically ask for it.
 - **Security first.** No hardcoded secrets, no `latest` tags in production manifests, no running as root.
 
 ## GitHub Actions — SHA Pinning Rules

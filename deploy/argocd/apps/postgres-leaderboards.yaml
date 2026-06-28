@@ -1,20 +1,22 @@
-# App-of-apps: the only Application applied by hand (kubectl apply -f).
-# It syncs deploy/argocd/apps/, which defines one Application per service.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: myfitnessrank-root
+  name: postgres-leaderboards
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
   source:
     repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
     targetRevision: feature/RND-003-leaderboards-service
-    path: deploy/argocd/apps
+    path: helm/postgres-leaderboards
   destination:
     server: https://kubernetes.default.svc
-    namespace: argocd
+    namespace: myfitnessrank
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

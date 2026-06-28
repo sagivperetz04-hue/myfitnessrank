@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "auth.fullname" . }}
+  name: {{ include "leaderboards.fullname" . }}
   labels:
-    {{- include "auth.labels" . | nindent 4 }}
+    {{- include "leaderboards.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   strategy:
@@ -13,11 +13,11 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      {{- include "auth.selectorLabels" . | nindent 6 }}
+      {{- include "leaderboards.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "auth.labels" . | nindent 8 }}
+        {{- include "leaderboards.labels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -26,7 +26,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: auth
+        - name: leaderboards
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
@@ -58,8 +58,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.jwt.existingSecret }}
                   key: {{ .Values.jwt.secretKey }}
-            - name: COOKIE_SECURE
-              value: {{ .Values.cookieSecure | quote }}
+            - name: LEADERBOARD_ENC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.encryption.existingSecret }}
+                  key: {{ .Values.encryption.secretKey }}
           readinessProbe:
             httpGet:
               path: /health
