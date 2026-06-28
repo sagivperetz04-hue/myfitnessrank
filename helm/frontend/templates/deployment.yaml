@@ -40,6 +40,8 @@ spec:
               value: {{ .Values.backendUrl | quote }}
             - name: AUTH_URL
               value: {{ .Values.authUrl | quote }}
+            - name: LEADERBOARDS_URL
+              value: {{ .Values.leaderboardsUrl | quote }}
           readinessProbe:
             httpGet:
               path: /

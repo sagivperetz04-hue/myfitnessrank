@@ -14,6 +14,9 @@ backendUrl: http://backend:5000
 # URL nginx proxies /api/auth/ requests to — the auth service in the same namespace
 authUrl: http://auth:5000
 
+# URL nginx proxies /api/leaderboards requests to — the leaderboards service
+leaderboardsUrl: http://leaderboards:5000
+
 service:
   enabled: true
   type: ClusterIP
