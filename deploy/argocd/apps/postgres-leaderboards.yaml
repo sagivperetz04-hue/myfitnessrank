@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: postgres-leaderboards
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
+    targetRevision: feature/RND-003-leaderboards-service
+    path: helm/postgres-leaderboards
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: myfitnessrank
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
