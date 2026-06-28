@@ -82,6 +82,7 @@ build_and_load() {
 build_and_load myfitnessrank-backend backend
 build_and_load myfitnessrank-frontend frontend
 build_and_load myfitnessrank-auth auth
+build_and_load myfitnessrank-leaderboards leaderboards
 
 kubectl get namespace "$APP_NS" >/dev/null 2>&1 || kubectl create namespace "$APP_NS"
 
@@ -110,6 +111,25 @@ if ! kubectl -n "$APP_NS" get secret jwt-signing-key >/dev/null 2>&1; then
   log "Creating JWT signing key secret"
   kubectl -n "$APP_NS" create secret generic jwt-signing-key \
     --from-literal=signing-key="$(openssl rand -hex 32)"
+fi
+
+# Create-once: the leaderboards postgres' PVC keeps the password it was initialized
+# with, so regenerating this secret would lock the service out of its existing DB
+if ! kubectl -n "$APP_NS" get secret leaderboards-db-credentials >/dev/null 2>&1; then
+  log "Creating leaderboards DB credentials secret"
+  kubectl -n "$APP_NS" create secret generic leaderboards-db-credentials \
+    --from-literal=username=leaderboards \
+    --from-literal=password="$(openssl rand -hex 16)" \
+    --from-literal=database=leaderboards
+fi
+
+# Create-once: rotating this Fernet key would make every encrypted lifter name
+# undecryptable. urlsafe base64 of 32 bytes is a valid Fernet key — openssl only,
+# keeping the script free of a python/cryptography dependency.
+if ! kubectl -n "$APP_NS" get secret leaderboards-enc-key >/dev/null 2>&1; then
+  log "Creating leaderboards encryption key secret"
+  kubectl -n "$APP_NS" create secret generic leaderboards-enc-key \
+    --from-literal=fernet-key="$(openssl rand -base64 32 | tr '+/' '-_')"
 fi
 
 # ArgoCD's bundled initial-admin password is regenerated on every fresh install.
@@ -157,7 +177,7 @@ wait_created() {
 }
 
 log "Waiting for ArgoCD to sync the app (first sync can take a few minutes)"
-for workload in statefulset/postgres statefulset/postgres-auth deployment/auth deployment/backend deployment/frontend; do
+for workload in statefulset/postgres statefulset/postgres-auth statefulset/postgres-leaderboards deployment/auth deployment/backend deployment/frontend deployment/leaderboards; do
   wait_created "$workload"
   kubectl -n "$APP_NS" rollout status "$workload" --timeout=300s
 done
