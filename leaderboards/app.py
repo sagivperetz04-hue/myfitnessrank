@@ -28,8 +28,17 @@ def _close_db(exc):
         return_connection(conn)
 
 
+@app.route("/health/live")
+def health_live():
+    # Liveness must not touch the DB: a transient DB outage should pull the pod
+    # from rotation (readiness), not restart it (a restart can't fix the DB and
+    # only causes cascading churn). This only proves the process is up.
+    return jsonify({"status": "ok"}), 200
+
+
 @app.route("/health")
 def health():
+    # Readiness: only route traffic here while the DB is reachable.
     try:
         conn = _db()
         with conn.cursor() as cur:
