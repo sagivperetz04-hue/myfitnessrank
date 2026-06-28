@@ -21,6 +21,11 @@ class TestHealth:
         assert r.status_code == 200
         assert r.get_json()["status"] == "ok"
 
+    def test_live_returns_200_without_db(self, client):
+        r = client.get("/health/live")
+        assert r.status_code == 200
+        assert r.get_json()["status"] == "ok"
+
 
 # ── POST /api/rank ────────────────────────────────────────────────────────────
 
