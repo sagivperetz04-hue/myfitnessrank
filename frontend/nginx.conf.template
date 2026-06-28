@@ -44,6 +44,17 @@ server {
         proxy_set_header  X-Forwarded-Proto $scheme;
     }
 
+    # Leaderboard calls go to the leaderboards service. No trailing slash so the
+    # prefix matches both GET /api/leaderboards and POST /api/leaderboards/submit;
+    # longer than /api/ below, so nginx's longest-prefix match routes them here.
+    location /api/leaderboards {
+        proxy_pass        ${LEADERBOARDS_URL};
+        proxy_set_header  Host              $host;
+        proxy_set_header  X-Real-IP         $remote_addr;
+        proxy_set_header  X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header  X-Forwarded-Proto $scheme;
+    }
+
     # Proxy remaining API calls to the backend service
     location /api/ {
         proxy_pass        ${BACKEND_URL};
