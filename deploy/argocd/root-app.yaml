@@ -9,7 +9,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
-    targetRevision: feature/RND-003-leaderboards-service
+    targetRevision: master
     path: deploy/argocd/apps
   destination:
     server: https://kubernetes.default.svc

@@ -9,7 +9,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
-    targetRevision: feature/RND-002-auth-service
+    targetRevision: master
     path: helm/backend
   destination:
     server: https://kubernetes.default.svc
