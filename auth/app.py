@@ -25,6 +25,18 @@ log = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# Prometheus metrics at /metrics. Under gunicorn (multiple workers) counters are
+# aggregated across workers via a shared dir (PROMETHEUS_MULTIPROC_DIR, set in the
+# image); tests and `python app.py` run single-process without it.
+if os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
+    from prometheus_flask_exporter.multiprocess import GunicornPrometheusMetrics
+
+    metrics = GunicornPrometheusMetrics(app)
+else:
+    from prometheus_flask_exporter import PrometheusMetrics
+
+    metrics = PrometheusMetrics(app)
+
 _REFRESH_COOKIE = "mfr_refresh"
 # Scope the refresh cookie to the auth endpoints only — it is never sent to the
 # other services. Secure is on by default (modern browsers accept Secure cookies
