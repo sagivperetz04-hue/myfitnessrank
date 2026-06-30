@@ -77,3 +77,12 @@ spec:
             periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # Writable scratch for the read-only root filesystem: gunicorn worker
+        # heartbeats and the Prometheus multiprocess metric files.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

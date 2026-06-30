@@ -2,10 +2,15 @@
 # monitoring namespace, so it must name that namespace explicitly.
 appNamespace: myfitnessrank
 
-# Label shared by the three web services' Services (squat/auth/leaderboards all
-# carry app=myfitnessrank). Postgres services share it too but expose no `http`
-# port, so the http-only endpoint below never scrapes them.
+# Label shared by all the app Services. The three Flask services (backend/auth/
+# leaderboards) expose /metrics on the "http" port; postgres shares the label but
+# has no "http" port, and frontend has one but no /metrics — see excludeComponents.
 appLabel: myfitnessrank
+
+# Components carrying appLabel + an "http" port that must NOT be scraped (nginx
+# frontend returns 404 on /metrics, which would show as a permanently down target).
+excludeComponents:
+  - frontend
 
 scrapeInterval: 30s
 

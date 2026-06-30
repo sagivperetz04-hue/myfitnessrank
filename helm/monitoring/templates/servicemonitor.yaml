@@ -12,6 +12,15 @@ spec:
   selector:
     matchLabels:
       app: {{ .Values.appLabel }}
+    {{- with .Values.excludeComponents }}
+    matchExpressions:
+      # The frontend (nginx) shares app=myfitnessrank and also names a port
+      # "http", but serves no /metrics — exclude it or Prometheus scrapes a 404.
+      - key: component
+        operator: NotIn
+        values:
+          {{- toYaml . | nindent 10 }}
+    {{- end }}
   endpoints:
     # Only the Flask services name a port "http"; postgres (port "postgres") is
     # matched by the selector but yields no target here.

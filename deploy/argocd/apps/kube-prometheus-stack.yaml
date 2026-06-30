@@ -8,7 +8,7 @@ metadata:
     # depends on for its ServiceMonitor.
     argocd.argoproj.io/sync-wave: "1"
 spec:
-  project: default
+  project: myfitnessrank
   source:
     repoURL: https://prometheus-community.github.io/helm-charts
     chart: kube-prometheus-stack
@@ -50,3 +50,16 @@ spec:
         duration: 30s
         maxDuration: 5m
         factor: 2
+  ignoreDifferences:
+    # The chart's admission webhook patches its own caBundle in-cluster after
+    # sync; without this ArgoCD reports a permanent OutOfSync and fights it.
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: kube-prometheus-stack-admission
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      name: kube-prometheus-stack-admission
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
