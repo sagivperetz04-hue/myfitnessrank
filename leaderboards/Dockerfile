@@ -38,9 +38,9 @@ COPY --chown=appuser:appuser scripts/ ./scripts/
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Prometheus multiprocess metrics: gunicorn workers write per-process db files
-# here, so the dir must exist and be writable by the runtime user.
+# here. The dir is created at startup by gunicorn.conf.py (it lives on a writable
+# /tmp emptyDir under the read-only root filesystem).
 ENV PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
-RUN mkdir -p /tmp/prometheus_multiproc && chown appuser:appuser /tmp/prometheus_multiproc
 
 # Numeric so K8s runAsNonRoot can verify the user is non-root
 USER 1000:1000

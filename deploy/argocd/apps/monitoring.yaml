@@ -8,7 +8,7 @@ metadata:
     # covers the gap if this still syncs before the CRD is registered.
     argocd.argoproj.io/sync-wave: "2"
 spec:
-  project: default
+  project: myfitnessrank
   source:
     repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
     targetRevision: master
