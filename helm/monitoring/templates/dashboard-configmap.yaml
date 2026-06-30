@@ -1,0 +1,15 @@
+{{- if .Values.dashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myfitnessrank-dashboard
+  labels:
+    # Watched by the kube-prometheus-stack Grafana sidecar, which imports any
+    # ConfigMap carrying this label as a dashboard.
+    grafana_dashboard: "1"
+data:
+  # Loaded with .Files.Get (not as a template) so the dashboard's own Go-template
+  # and dollar-brace tokens survive Helm rendering untouched.
+  myfitnessrank.json: |-
+{{ .Files.Get "dashboards/myfitnessrank.json" | indent 4 }}
+{{- end }}

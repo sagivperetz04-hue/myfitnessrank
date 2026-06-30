@@ -30,14 +30,19 @@ WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
 
-COPY --chown=appuser:appuser app.py db.py ./
+COPY --chown=appuser:appuser app.py db.py gunicorn.conf.py ./
 COPY --chown=appuser:appuser services/ ./services/
 
 ENV PATH="/opt/venv/bin:$PATH"
+
+# Prometheus multiprocess metrics: gunicorn workers write per-process db files
+# here, so the dir must exist and be writable by the runtime user.
+ENV PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
+RUN mkdir -p /tmp/prometheus_multiproc && chown appuser:appuser /tmp/prometheus_multiproc
 
 # Numeric so K8s runAsNonRoot can verify the user is non-root
 USER 1000:1000
 
 EXPOSE 5000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]

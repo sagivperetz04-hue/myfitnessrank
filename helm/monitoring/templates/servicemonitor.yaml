@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: myfitnessrank-services
+  labels:
+    app: {{ .Values.appLabel }}
+spec:
+  # Select the web services in the app namespace by their shared label.
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.appNamespace }}
+  selector:
+    matchLabels:
+      app: {{ .Values.appLabel }}
+  endpoints:
+    # Only the Flask services name a port "http"; postgres (port "postgres") is
+    # matched by the selector but yields no target here.
+    - port: http
+      path: /metrics
+      interval: {{ .Values.scrapeInterval }}
