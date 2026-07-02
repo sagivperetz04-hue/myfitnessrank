@@ -85,7 +85,7 @@ export function LoginPage({ onGuest, onAuthed, forceOnline = false }) {
   return (
     <div className="login-page">
       <div className="login-brand">
-        <h1><span className="logo-emoji">🏋️</span> MyFitnessRank</h1>
+        <h1 className="wordmark">MyFitness<span>Rank</span></h1>
         <p className="login-tagline">Know exactly where your lifts stand.</p>
       </div>
 

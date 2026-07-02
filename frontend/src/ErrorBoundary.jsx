@@ -15,7 +15,7 @@ export class ErrorBoundary extends Component {
     if (this.state.error) {
       return (
         <div className="error-screen" role="alert">
-          <h1>Something went wrong 💔</h1>
+          <h1>Something went wrong</h1>
           <p>Reload the page to keep lifting.</p>
           <button onClick={() => window.location.reload()}>Reload</button>
         </div>
