@@ -9,7 +9,8 @@ export PATH="$HOME/.local/bin:$PATH"
 
 CLUSTER=myfitnessrank
 NODE="${CLUSTER}-control-plane"
-APP_NS=myfitnessrank
+# One namespace per environment on the single cluster: myfitnessrank-<env>
+ENVS="dev staging prod"
 INGRESS_MANIFEST=https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.15.1/deploy/static/provider/kind/deploy.yaml
 ARGOCD_MANIFEST=https://raw.githubusercontent.com/argoproj/argo-cd/v3.4.3/manifests/install.yaml
 # Kept outside the repo so it can never be committed; create-once like the other secrets.
@@ -84,53 +85,54 @@ build_and_load myfitnessrank-frontend frontend
 build_and_load myfitnessrank-auth auth
 build_and_load myfitnessrank-leaderboards leaderboards
 
-kubectl get namespace "$APP_NS" >/dev/null 2>&1 || kubectl create namespace "$APP_NS"
+# Every environment gets independently generated secrets, so credentials and
+# tokens from one env can never work in another. All are create-once:
+#  - DB credentials: each postgres PVC keeps the password it was initialized
+#    with — regenerating would lock the services out of their existing DBs
+#  - JWT signing key: rotating it would invalidate every issued token
+#  - Fernet key: rotating it would make every encrypted lifter name undecryptable
+#    (urlsafe base64 of 32 bytes is a valid Fernet key — openssl only, keeping
+#    the script free of a python/cryptography dependency)
+for env in $ENVS; do
+  ns="myfitnessrank-${env}"
+  kubectl get namespace "$ns" >/dev/null 2>&1 || kubectl create namespace "$ns"
 
-# Create-once: postgres' PVC keeps the password it was initialized with,
-# so regenerating this secret would lock the backend out of the existing DB
-if ! kubectl -n "$APP_NS" get secret fitrank-db-credentials >/dev/null 2>&1; then
-  log "Creating DB credentials secret"
-  kubectl -n "$APP_NS" create secret generic fitrank-db-credentials \
-    --from-literal=username=fitrank \
-    --from-literal=password="$(openssl rand -hex 16)" \
-    --from-literal=database=fitrank
-fi
+  if ! kubectl -n "$ns" get secret fitrank-db-credentials >/dev/null 2>&1; then
+    log "[$env] Creating DB credentials secret"
+    kubectl -n "$ns" create secret generic fitrank-db-credentials \
+      --from-literal=username=fitrank \
+      --from-literal=password="$(openssl rand -hex 16)" \
+      --from-literal=database=fitrank
+  fi
 
-# Create-once: the auth postgres' PVC keeps the password it was initialized with,
-# so regenerating this secret would lock the auth service out of its existing DB
-if ! kubectl -n "$APP_NS" get secret auth-db-credentials >/dev/null 2>&1; then
-  log "Creating auth DB credentials secret"
-  kubectl -n "$APP_NS" create secret generic auth-db-credentials \
-    --from-literal=username=fitauth \
-    --from-literal=password="$(openssl rand -hex 16)" \
-    --from-literal=database=fitauth
-fi
+  if ! kubectl -n "$ns" get secret auth-db-credentials >/dev/null 2>&1; then
+    log "[$env] Creating auth DB credentials secret"
+    kubectl -n "$ns" create secret generic auth-db-credentials \
+      --from-literal=username=fitauth \
+      --from-literal=password="$(openssl rand -hex 16)" \
+      --from-literal=database=fitauth
+  fi
 
-# Create-once: rotating the JWT signing key would invalidate every issued token
-if ! kubectl -n "$APP_NS" get secret jwt-signing-key >/dev/null 2>&1; then
-  log "Creating JWT signing key secret"
-  kubectl -n "$APP_NS" create secret generic jwt-signing-key \
-    --from-literal=signing-key="$(openssl rand -hex 32)"
-fi
+  if ! kubectl -n "$ns" get secret jwt-signing-key >/dev/null 2>&1; then
+    log "[$env] Creating JWT signing key secret"
+    kubectl -n "$ns" create secret generic jwt-signing-key \
+      --from-literal=signing-key="$(openssl rand -hex 32)"
+  fi
 
-# Create-once: the leaderboards postgres' PVC keeps the password it was initialized
-# with, so regenerating this secret would lock the service out of its existing DB
-if ! kubectl -n "$APP_NS" get secret leaderboards-db-credentials >/dev/null 2>&1; then
-  log "Creating leaderboards DB credentials secret"
-  kubectl -n "$APP_NS" create secret generic leaderboards-db-credentials \
-    --from-literal=username=leaderboards \
-    --from-literal=password="$(openssl rand -hex 16)" \
-    --from-literal=database=leaderboards
-fi
+  if ! kubectl -n "$ns" get secret leaderboards-db-credentials >/dev/null 2>&1; then
+    log "[$env] Creating leaderboards DB credentials secret"
+    kubectl -n "$ns" create secret generic leaderboards-db-credentials \
+      --from-literal=username=leaderboards \
+      --from-literal=password="$(openssl rand -hex 16)" \
+      --from-literal=database=leaderboards
+  fi
 
-# Create-once: rotating this Fernet key would make every encrypted lifter name
-# undecryptable. urlsafe base64 of 32 bytes is a valid Fernet key — openssl only,
-# keeping the script free of a python/cryptography dependency.
-if ! kubectl -n "$APP_NS" get secret leaderboards-enc-key >/dev/null 2>&1; then
-  log "Creating leaderboards encryption key secret"
-  kubectl -n "$APP_NS" create secret generic leaderboards-enc-key \
-    --from-literal=fernet-key="$(openssl rand -base64 32 | tr '+/' '-_')"
-fi
+  if ! kubectl -n "$ns" get secret leaderboards-enc-key >/dev/null 2>&1; then
+    log "[$env] Creating leaderboards encryption key secret"
+    kubectl -n "$ns" create secret generic leaderboards-enc-key \
+      --from-literal=fernet-key="$(openssl rand -base64 32 | tr '+/' '-_')"
+  fi
+done
 
 # Monitoring stack runs in its own namespace. Create it + the create-once Grafana
 # admin secret up front so the kube-prometheus-stack app finds them on first sync.
@@ -175,35 +177,44 @@ kubectl -n ingress-nginx wait deployment/ingress-nginx-controller \
 
 if [ "${REBUILD:-0}" = 1 ]; then
   log "Restarting workloads to pick up rebuilt images"
-  kubectl -n "$APP_NS" rollout restart deployment,statefulset 2>/dev/null || true
+  for env in $ENVS; do
+    kubectl -n "myfitnessrank-${env}" rollout restart deployment,statefulset 2>/dev/null || true
+  done
 fi
 
 wait_created() {
+  local ns=$1 obj=$2
   for _ in $(seq 1 60); do
-    kubectl -n "$APP_NS" get "$1" >/dev/null 2>&1 && return 0
+    kubectl -n "$ns" get "$obj" >/dev/null 2>&1 && return 0
     sleep 5
   done
-  die "$1 never appeared — check ArgoCD sync status"
+  die "$obj never appeared in $ns — check ArgoCD sync status"
 }
 
-log "Waiting for ArgoCD to sync the app (first sync can take a few minutes)"
-for workload in statefulset/postgres statefulset/postgres-auth statefulset/postgres-leaderboards deployment/auth deployment/backend deployment/frontend deployment/leaderboards; do
-  wait_created "$workload"
-  kubectl -n "$APP_NS" rollout status "$workload" --timeout=300s
+log "Waiting for ArgoCD to sync the apps (first sync can take a few minutes)"
+for env in $ENVS; do
+  ns="myfitnessrank-${env}"
+  for workload in statefulset/postgres statefulset/postgres-auth statefulset/postgres-leaderboards deployment/auth deployment/backend deployment/frontend deployment/leaderboards; do
+    wait_created "$ns" "$workload"
+    kubectl -n "$ns" rollout status "$workload" --timeout=300s
+  done
 done
 
 # initdb seeds global_standards only on a fresh PVC, so a persisted volume keeps
-# whatever it was first loaded with. Re-seed every run to reconcile the table to
-# the committed standards — TRUNCATE + INSERT in one transaction is idempotent.
+# whatever it was first loaded with. Re-seed every run to reconcile each env's
+# table to the committed standards — TRUNCATE + INSERT in one transaction is
+# idempotent.
 log "Reconciling global standards"
-{
-  echo "BEGIN;"
-  echo "TRUNCATE global_standards;"
-  cat backend/scripts/seed_global_standards.sql
-  echo "COMMIT;"
-} | kubectl -n "$APP_NS" exec -i postgres-0 -- \
-      sh -c 'psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null \
-  || die "global standards re-seed failed"
+for env in $ENVS; do
+  {
+    echo "BEGIN;"
+    echo "TRUNCATE global_standards;"
+    cat backend/scripts/seed_global_standards.sql
+    echo "COMMIT;"
+  } | kubectl -n "myfitnessrank-${env}" exec -i postgres-0 -- \
+        sh -c 'psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null \
+    || die "[$env] global standards re-seed failed"
+done
 
 # A port-forward is process-bound and dies on host/cluster restart, so the
 # ArgoCD UI is unreachable after a reboot until it's relaunched. Reconcile it
@@ -231,7 +242,9 @@ else
 fi
 
 log "Ready"
-echo "App:       http://localhost:8080"
+echo "App (prod):    http://localhost:8080"
+echo "App (staging): http://staging.localhost:8080"
+echo "App (dev):     http://dev.localhost:8080"
 echo "ArgoCD UI: https://localhost:${ARGOCD_PF_PORT}  (port-forward running in background; log: /tmp/argocd-port-forward.log)"
 echo "           user: admin   password: cat ${ARGOCD_PW_FILE}"
 echo "Grafana:   http://localhost:${GRAFANA_PF_PORT}  (once kube-prometheus-stack has synced; log: /tmp/grafana-port-forward.log)"

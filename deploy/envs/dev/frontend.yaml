@@ -1,0 +1,5 @@
+# dev overlay for helm/frontend — host-routed at http://dev.localhost:8080
+# (browsers resolve *.localhost to loopback, no /etc/hosts entry needed).
+replicaCount: 1
+ingress:
+  host: dev.localhost

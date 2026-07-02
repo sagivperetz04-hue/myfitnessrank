@@ -1,6 +1,9 @@
-# Namespace where the app services run — the ServiceMonitor targets them from the
-# monitoring namespace, so it must name that namespace explicitly.
-appNamespace: myfitnessrank
+# Environment namespaces where the app services run — the ServiceMonitor targets
+# them from the monitoring namespace, so it must name each one explicitly.
+appNamespaces:
+  - myfitnessrank-dev
+  - myfitnessrank-staging
+  - myfitnessrank-prod
 
 # Label shared by all the app Services. The three Flask services (backend/auth/
 # leaderboards) expose /metrics on the "http" port; postgres shares the label but
