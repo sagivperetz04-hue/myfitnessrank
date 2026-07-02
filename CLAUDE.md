@@ -73,6 +73,7 @@ Always show the command and wait for the user to run:
 
 ## Working Style
 
+- **Keep the manifest current.** Every change — and every project directory it touches — must be recorded in `PROJECT_MANIFEST.md` (update the relevant section and the `Last updated` line) in the same branch/PR as the change itself.
 - **Ask before major changes.** Confirm before introducing new dependencies, changing architecture, modifying CI/CD pipelines, or restructuring directories.
 - **Answer in order:** (1) solution, (2) short "why this works", (3) optional deep dive.
 - **No comments explaining WHAT the code does.** Only comment WHY if it's non-obvious.
