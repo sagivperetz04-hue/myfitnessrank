@@ -1,0 +1,29 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: myfitnessrank-services
+  labels:
+    app: {{ .Values.appLabel }}
+spec:
+  # Select the web services in the app namespace by their shared label.
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.appNamespace }}
+  selector:
+    matchLabels:
+      app: {{ .Values.appLabel }}
+    {{- with .Values.excludeComponents }}
+    matchExpressions:
+      # The frontend (nginx) shares app=myfitnessrank and also names a port
+      # "http", but serves no /metrics — exclude it or Prometheus scrapes a 404.
+      - key: component
+        operator: NotIn
+        values:
+          {{- toYaml . | nindent 10 }}
+    {{- end }}
+  endpoints:
+    # Only the Flask services name a port "http"; postgres (port "postgres") is
+    # matched by the selector but yields no target here.
+    - port: http
+      path: /metrics
+      interval: {{ .Values.scrapeInterval }}

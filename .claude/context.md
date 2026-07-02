@@ -2,99 +2,105 @@
 
 ## What This Project Is
 
-**myfitnessrank-app** is a 3-tier fitness ranking web application.
+**myfitnessrank-app** is a fitness ranking web application built as microservices.
 
 Users log their lifts (exercise, weight, reps). The system calculates their One Rep Max (1RM),
 compares it against a pre-seeded global distribution, and assigns a percentile rank tier
-(Copper → Bronze → Silver → Gold → Platinum → Elite).
+(Copper → Bronze → Silver → Gold → Platinum → Elite). Signed-in users can submit lifts
+to a global leaderboard.
 
 The app is the vehicle for a full DevOps pipeline — the primary goal is the infrastructure,
 CI/CD, and observability around the application, not the application itself.
 
 ---
 
-## MVP Feature Set
-
-1. **Lift input** — form to enter exercise name, weight (kg), reps
-2. **1RM calculation** — backend computes 1RM using Epley formula: `weight * (1 + reps/30)`
-3. **Ranking** — classify 1RM into tier against `global_standards` table benchmarks
-4. **Dashboard** — display rank per muscle group + overall weighted body rank
-5. **Workout logs** — save sets under predefined templates (Push / Pull / Legs)
-
----
-
 ## Architecture
+
+Originally a 3-tier monolith; split into microservices in RND-002 (auth) and RND-003
+(leaderboards). **Database-per-service** — each service owns its schema, no shared tables.
+The frontend nginx is the single public entry point (Ingress) and reverse-proxies to
+every service; the APIs are never exposed outside the cluster directly.
 
 ```
 Browser
-  └─► Frontend (React or plain HTML — port 80/443 via Ingress)
-        └─► Backend API (Flask — port 5000)
-              └─► PostgreSQL (StatefulSet — port 5432)
+  └─► Frontend (React + unprivileged nginx :8080 — exposed via Ingress)
+        ├─► /api/auth/*        → auth service (Flask :5000)          → postgres-auth
+        ├─► /api/leaderboards* → leaderboards service (Flask :5000)  → postgres-leaderboards
+        └─► /api/*             → backend service (Flask :5000)       → postgres (fitrank)
+                                     └─► calls leaderboards internally for /api/leaderboard
 ```
 
-**Frontend** — serves the dashboard and lift input forms. Calls the backend API.
-**Backend** — stateless Flask API. Handles 1RM calculation, ranking logic, DB queries.
-**Database** — PostgreSQL StatefulSet. Persists users, workout logs, and global standards.
+| Service | Responsibility |
+|---|---|
+| **frontend** | Dashboard, lift input, login/signup, leaderboard page; nginx doubles as the API gateway (upstream URLs injected via env at container start) |
+| **backend** | 1RM calculation (Epley), percentile ranking against `global_standards`, workout history/bests |
+| **auth** | Accounts; Argon2 password hashing; JWT access tokens + refresh cookie path-scoped to `/api/auth` |
+| **leaderboards** | Public leaderboard reads; JWT-verified lift submissions (verifies auth's tokens via shared signing key — no per-request call to auth); Fernet-encrypted lifter names |
+| **postgres / postgres-auth / postgres-leaderboards** | Three PostgreSQL 15 StatefulSets, one per service |
+
+Every service exposes `/health` (readiness, DB ping), `/health/live` (liveness, dependency-free),
+and `/metrics` (Prometheus, gunicorn multiprocess-aware).
 
 ---
 
-## Data Model (PostgreSQL)
+## Data Model
 
-```sql
--- Read-only benchmark table, seeded at deploy time
-CREATE TABLE global_standards (
-    exercise    TEXT NOT NULL,
-    tier        TEXT NOT NULL,   -- copper, bronze, silver, gold, platinum, elite
-    min_1rm_kg  NUMERIC NOT NULL,
-    PRIMARY KEY (exercise, tier)
-);
+The `schema.sql` in each service directory is the source of truth. Summary:
 
--- Users (for future auth — MVP can stub this)
-CREATE TABLE users (
-    id         SERIAL PRIMARY KEY,
-    username   TEXT UNIQUE NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
+**backend** (`backend/schema.sql`, DB `fitrank`):
+- `global_standards` — read-only benchmark distribution, seeded at deploy: `(lift, sex, weight_class_kg, percentile, track)` → `min_kg`; `track` is `competition` or `world_avg`
+- `users` — `id`, unique `username`
+- `workout_logs` — full lift record incl. `one_rm_kg`, `weight_class_kg`, and percentile+tier for both tracks; indexed for history and per-exercise-best queries
 
--- Workout log
-CREATE TABLE workout_logs (
-    id          SERIAL PRIMARY KEY,
-    user_id     INT REFERENCES users(id),
-    exercise    TEXT NOT NULL,
-    weight_kg   NUMERIC NOT NULL,
-    reps        INT NOT NULL,
-    one_rm_kg   NUMERIC NOT NULL,
-    tier        TEXT NOT NULL,
-    logged_at   TIMESTAMPTZ DEFAULT NOW()
-);
-```
+**auth** (`auth/schema.sql`, DB in `postgres-auth`):
+- `accounts` — `email` (unique), `username` (unique case-insensitively via `LOWER(username)` index, stored as typed), `password_hash` (Argon2)
+
+**leaderboards** (`leaderboards/schema.sql`, DB in `postgres-leaderboards`):
+- `leaderboard_entries` — one row per lifter: `sex`, `source` (`seed` dataset row or `user`), encrypted name (`name_enc`), per-lift kg columns, generated `bw_ratio`; partial unique index `(sex, user_id) WHERE source = 'user'` is the upsert target for overwrite-when-better submissions
 
 ---
 
-## API Endpoints (Backend)
+## API Endpoints
 
+**backend**
 | Method | Path | Description |
 |---|---|---|
-| GET | `/health` | K8s liveness/readiness probe |
-| POST | `/api/rank` | Body: `{username, exercise, weight_kg, reps, bodyweight_kg, sex}` → returns `{one_rm_kg, weight_class_kg, competition: {percentile, tier}, world_avg: {percentile, tier}}` |
-| GET | `/api/rank/history` | Returns recent logs for the user |
-| POST | `/api/log` | Save a workout set |
+| POST | `/api/rank` | `{username, exercise, weight_kg, reps, bodyweight_kg, sex}` → `{one_rm_kg, weight_class_kg, competition: {percentile, tier}, world_avg: {percentile, tier}}`; validates reps ≤ 20, weight ≤ world record + 2 kg |
+| GET | `/api/users/<username>/history` | Paginated logs (`limit` ≤ 100, `offset`, optional `exercise` filter) |
+| GET | `/api/users/<username>/best` | Best 1RM per exercise |
+| GET | `/api/leaderboard` | Proxies to the leaderboards service (`sex`, `weight_class`, `lift`) |
+
+**auth** (all under `/api/auth/`)
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/auth/username-available` | Live signup-form check |
+| POST | `/api/auth/signup` | Email + username + password-strength validation |
+| POST | `/api/auth/login` | Returns access JWT, sets `mfr_refresh` cookie |
+| POST | `/api/auth/refresh` | New access token from the refresh cookie |
+| POST | `/api/auth/logout` | Clears the refresh cookie |
+| GET | `/api/auth/me` | Identity from a valid access token |
+
+**leaderboards**
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/leaderboards` | Top entries by sex / weight class / lift |
+| POST | `/api/leaderboards/submit` | Requires `Bearer` access token; upserts the caller's entry when better |
 
 ---
 
 ## Tech Stack Decisions
 
-| Layer | Choice | Reason |
+| Layer | Choice | Status |
 |---|---|---|
-| Backend | Python 3.11 + Flask | Familiar, simple, course uses Python |
-| Frontend | React (Vite) or plain HTML | TBD |
-| Database | PostgreSQL 15 | Standard relational, StatefulSet-friendly |
-| Container registry | AWS ECR | Required by assignment |
-| K8s cluster | AWS EKS | Required by assignment |
-| IaC | Terraform + terraform-aws-modules | Required by assignment |
-| GitOps | ArgoCD | Required by assignment |
-| CI | GitHub Actions | Chosen over Jenkins |
-| Monitoring | Prometheus + Grafana (kube-prometheus-stack) | Required by assignment |
+| Backend services | Python 3.11 + Flask + gunicorn | Done (backend, auth, leaderboards) |
+| Frontend | React 18 + Vite, served by unprivileged nginx | Done |
+| Database | PostgreSQL 15, StatefulSet per service | Done (local) |
+| Container registry | AWS ECR | Pending (Terraform) |
+| K8s cluster | AWS EKS | Pending (Terraform); kind locally |
+| IaC | Terraform + terraform-aws-modules + Terragrunt | Pending |
+| GitOps | ArgoCD, app-of-apps, tracks `master` | Done (local cluster) |
+| CI | GitHub Actions (SHA-pinned actions, OIDC to AWS) | Done; deploy workflows pending |
+| Monitoring | Prometheus + Grafana via kube-prometheus-stack | Done (RND-005) |
 | Logging | Elasticsearch + Kibana (or CloudWatch) | TBD |
 
 ---
@@ -103,29 +109,22 @@ CREATE TABLE workout_logs (
 
 ```
 myfitnessrank-app/         ← this repo
-  backend/
-    app.py
-    requirements.txt
-    Dockerfile
-  frontend/
-    (TBD)
-    Dockerfile
-  helm/
-    backend/
-    frontend/
-    postgres/
-  .github/
-    workflows/
-      ci.yml
-      deploy-staging.yml
-      deploy-production.yml
-  CLAUDE.md
-  .claude/
-    standards.md
-    context.md
-    prompts/
+  backend/                 # ranking API (app, services/, tests/, schema.sql, Dockerfile)
+  auth/                    # auth service (same shape)
+  leaderboards/            # leaderboards service (same shape + seed scripts)
+  frontend/                # React app + nginx.conf.template + Dockerfile
+  helm/                    # one chart per service + per-DB postgres charts + monitoring
+  deploy/
+    kind/                  # local cluster config
+    argocd/                # root app + one Application per service (app-of-apps)
+  .github/workflows/
+    ci.yml                 # lint + test + build (+ ECR push on master)
+                           # deploy-staging.yml / deploy-production.yml: planned
+  start / shutdown         # idempotent local environment up/down
+  PROJECT_MANIFEST.md      # detailed build log + roadmap templates
+  CLAUDE.md  .claude/      # working rules, standards, this file
 ```
 
-Separate repositories:
+Separate repositories (planned):
 - `myfitnessrank-gitops` — ArgoCD desired state per environment
-- `myfitnessrank-infra` — Terraform modules
+- `myfitnessrank-infra` — Terraform modules + Terragrunt live tree
