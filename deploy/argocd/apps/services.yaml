@@ -46,6 +46,12 @@ spec:
           targetRevision: '{{.revision}}'
           path: helm/{{.service}}
           helm:
+            # ArgoCD defaults the Helm release name to the Application name
+            # ({{.service}}-{{.env}}), which the charts' fullname helpers turn
+            # into suffixed resource names — breaking the fixed DNS names the
+            # services use to reach each other (postgres, auth, ...). Pin the
+            # release to the bare service name; namespaces already isolate envs.
+            releaseName: '{{.service}}'
             valueFiles:
               - $values/deploy/envs/{{.env}}/{{.service}}.yaml
         - repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git

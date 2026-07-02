@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-02, branch `feature/RND-005-monitoring`.
+> Last updated: 2026-07-02, branch `fix/RND-006-helm-release-names`.
 
 ---
 
@@ -201,7 +201,7 @@ App-of-apps pattern; `root-app.yaml` is the **only** manifest ever applied by ha
 |---|---|
 | `root-app.yaml` | Root Application → syncs `deploy/argocd/apps/` from `master` |
 | `apps/appproject.yaml` | `myfitnessrank` AppProject — scopes what the child apps may deploy (least privilege vs. `default`) |
-| `apps/services.yaml` | ApplicationSet: matrix generator (3 envs × 7 services) → 21 Applications named `<service>-<env>`, each multi-source (chart + `$values` ref to `deploy/envs/<env>/<service>.yaml`), destination `myfitnessrank-<env>`; dev apps track the `dev` branch, staging/prod track `master` |
+| `apps/services.yaml` | ApplicationSet: matrix generator (3 envs × 7 services) → 21 Applications named `<service>-<env>`, each multi-source (chart + `$values` ref to `deploy/envs/<env>/<service>.yaml`), destination `myfitnessrank-<env>`; dev apps track the `dev` branch, staging/prod track `master`. `helm.releaseName` is pinned to the bare service name — without it ArgoCD uses the Application name (`<service>-<env>`) as the release name, suffixing every K8s resource and breaking cross-service DNS (`postgres`, `auth`, …) |
 | `apps/kube-prometheus-stack.yaml` | Upstream chart from the prometheus-community Helm repo (see §10) |
 | `apps/monitoring.yaml` | Our `helm/monitoring` chart (ServiceMonitor + dashboard) |
 
