@@ -8,9 +8,10 @@
 
 .rb-label {
   font-size: 0.72rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #9a9aa8;
+  letter-spacing: 0.08em;
+  color: var(--steel);
   margin-bottom: 10px;
 }
 
@@ -97,15 +98,15 @@
 
 .rb-tier {
   display: block;
-  font-size: 1.05rem;
+  font-family: var(--display);
+  font-size: 1.35rem;
   font-weight: 800;
-  font-style: italic;
   letter-spacing: 0.14em;
 }
 
 .rb-pct {
   display: block;
   font-size: 0.78rem;
-  color: #9a9aa8;
+  color: var(--steel);
   margin-top: 3px;
 }
