@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-02, branch `fix/RND-006-helm-release-names`.
+> Last updated: 2026-07-02, branch `feature/RND-007-frontend-redesign`.
 
 ---
 
@@ -128,6 +128,8 @@ Tests: `test_board.py`, `test_crypto.py`, `test_extract.py`.
 ## 5. Frontend (`frontend/`) — RND-004 included
 
 React 18 + Vite, served by **unprivileged nginx** which doubles as the API gateway.
+
+**Visual design (RND-007, chart 0.2.0):** "meet day" system — chalk-white background, ink woodtype (Big Shoulders Display + Barlow via Google Fonts `<link>`), IPF competition plate colors (red/blue/yellow/green) as the only accents, judges'-lights reveal on the result scorecard, loaded-bar header rule. Tokens live in `src/App.css` `:root`; tier text colors in `src/tiers.js`. Respects `prefers-reduced-motion`.
 
 ### Application code
 | File | What it does |

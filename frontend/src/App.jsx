@@ -43,10 +43,12 @@ const DEFAULT_FORM = {
 function useCountUp(target, ms = 900) {
   const [val, setVal] = useState(0)
   useEffect(() => {
+    // zero duration makes the first frame land on the final value
+    const dur = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : ms
     let raf
     const start = performance.now()
     const tick = (now) => {
-      const t = Math.min((now - start) / ms, 1)
+      const t = dur === 0 ? 1 : Math.min((now - start) / dur, 1)
       setVal(target * (1 - Math.pow(1 - t, 3)))
       if (t < 1) raf = requestAnimationFrame(tick)
     }
@@ -54,6 +56,11 @@ function useCountUp(target, ms = 900) {
     return () => cancelAnimationFrame(raf)
   }, [target, ms])
   return val
+}
+
+// Meet wordmark — RANK carries the plate-red flood
+function Wordmark({ as: Tag = 'h1' }) {
+  return <Tag className="wordmark">MyFitness<span>Rank</span></Tag>
 }
 
 // Competition-colored plates, mirrored on both sleeves
@@ -125,16 +132,22 @@ function LiftIntro({ username, onDone }) {
 function ResultCard({ result }) {
   const oneRm = useCountUp(result.one_rm_kg)
   return (
-    <div className="result-card">
-      <div className="result-stats">
-        <div className="stat">
-          <span className="stat-label">Estimated 1RM</span>
-          <span className="stat-value">{oneRm.toFixed(1)} kg</span>
+    <section className="scorecard">
+      <div className="scorecard-call">
+        {/* Three white lights = good lift; they flip on left to right */}
+        <div className="judge-panel" aria-hidden="true">
+          <span/><span/><span/>
         </div>
-        <div className="stat">
-          <span className="stat-label">Weight Class</span>
-          <span className="stat-value">{formatWeightClass(result.weight_class_kg)} kg</span>
-        </div>
+        <p className="call-text">Good lift</p>
+      </div>
+      <div className="scorecard-max">
+        <span className="max-label">Estimated one-rep max</span>
+        <span className="max-value">
+          {oneRm.toFixed(1)}<em>kg</em>
+        </span>
+        <span className="max-class">
+          Weight class {formatWeightClass(result.weight_class_kg)} kg
+        </span>
       </div>
       <div className="rank-row">
         <RankBadge
@@ -150,7 +163,7 @@ function ResultCard({ result }) {
           percentile={result.world_avg.percentile}
         />
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -242,13 +255,14 @@ export function LiftForm({ username, onResult }) {
 
       {overLimit && (
         <p className="over-limit" role="alert">
-          😞 Really? if yes go to compete and set a new world record
+          Really? That&apos;s above the world record ({weightLimit - WR_MARGIN_KG} kg).
+          Check the weight — or go claim the record.
         </p>
       )}
       {error && <p className="error" role="alert">{error}</p>}
 
       <button type="submit" disabled={loading || overLimit}>
-        {loading ? 'Calculating…' : 'Get My Rank 🏋️'}
+        {loading ? 'Calculating…' : 'Get my rank'}
       </button>
     </form>
   )
@@ -452,7 +466,7 @@ function RankApp({ identity, editable, onExit, exitLabel }) {
       {intro && username && <LiftIntro username={username} onDone={() => setIntro(false)}/>}
 
       <header>
-        <h1><span className="logo-emoji">🏋️</span> MyFitnessRank</h1>
+        <Wordmark/>
         {editable && (
           <form className="username-form" onSubmit={saveUsername}>
             <input
