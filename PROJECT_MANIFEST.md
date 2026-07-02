@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-02, branch `feature/RND-007-frontend-redesign`.
+> Last updated: 2026-07-02, branch `feature/RND-008-leaderboard-sync`.
 
 ---
 
@@ -42,7 +42,7 @@ Core ranking API. Python 3.11 + Flask 3.0.3, served by gunicorn (2 workers).
 | `app.py` | Flask app, all routes, request validation, Prometheus metrics wiring |
 | `db.py` | psycopg2 connection pool; credentials from env vars (never hardcoded) |
 | `services/ranking.py` | Epley 1RM formula (`weight * (1 + reps/30)`), weight-class assignment, percentile lookup against `global_standards`, tier assignment (Copper → Elite) |
-| `services/leaderboard.py` | HTTP client that calls the leaderboards service (`get_top_lifters`) |
+| `services/leaderboard.py` | HTTP clients: `get_top_lifters` (external rankings API) and `submit_bests` (RND-008 — forwards a signed-in user's best 1RMs to the leaderboards service, `LEADERBOARDS_URL`, default `http://leaderboards:5000`) |
 | `gunicorn.conf.py` | Creates `PROMETHEUS_MULTIPROC_DIR` at startup so multi-worker metric counters aggregate correctly |
 | `schema.sql` | `users`, `workout_logs`, `global_standards` tables |
 | `scripts/generate_global_standards.py` + `seed_global_standards.sql` | Generates and seeds the benchmark distribution the percentile ranking compares against |
@@ -52,7 +52,7 @@ Core ranking API. Python 3.11 + Flask 3.0.3, served by gunicorn (2 workers).
 |---|---|---|
 | GET | `/health/live` | Liveness — deliberately **never** touches the DB (a DB outage should fail readiness, not restart pods) |
 | GET | `/health` | Readiness — `SELECT 1` DB ping, 503 when DB unreachable |
-| POST | `/api/rank` | Validates username/exercise/sex/weight/reps (reps ≤ 20 for Epley reliability, weight capped at world record + 2 kg), computes 1RM, persists the log, returns competition + world-average percentile/tier |
+| POST | `/api/rank` | Validates username/exercise/sex/weight/reps (reps ≤ 20 for Epley reliability, weight capped at world record + 2 kg), computes 1RM, persists the log, returns competition + world-average percentile/tier. RND-008: if the request carries a Bearer token, forwards the user's best squat/bench/deadlift 1RMs to the leaderboards `/submit` (best-effort — a leaderboards outage never fails the rank; skipped until all three lifts have been logged; the leaderboards service dedups one row per user per sex via keep-the-best upsert). No lift verification yet — planned |
 | GET | `/api/users/<username>/history` | Paginated (limit ≤ 100), optional exercise filter |
 | GET | `/api/users/<username>/best` | Best 1RM per exercise (`DISTINCT ON`) |
 | GET | `/api/leaderboard` | Proxies to the leaderboards service; 502 if upstream down |

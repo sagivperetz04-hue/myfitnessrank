@@ -1,5 +1,7 @@
 """Integration tests for all API routes against a real Postgres database."""
 
+import app as app_module
+
 VALID = {
     "username": "testuser",
     "exercise": "squat",
@@ -183,6 +185,69 @@ class TestRankValidation:
             ).status_code
             == 200
         )
+
+
+class TestRankLeaderboardSync:
+    """Signed-in lifts are forwarded to the leaderboards service; guests are not."""
+
+    AUTH = {"Authorization": "Bearer test-token"}
+
+    def _capture(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(
+            app_module,
+            "submit_bests",
+            lambda bearer, sex, bodyweight_kg, bests: calls.append(
+                {
+                    "bearer": bearer,
+                    "sex": sex,
+                    "bodyweight_kg": bodyweight_kg,
+                    "bests": bests,
+                }
+            ),
+        )
+        return calls
+
+    def _log(self, client, exercise, weight, headers=None):
+        return client.post(
+            "/api/rank",
+            json={**VALID, "exercise": exercise, "weight_kg": weight},
+            headers=headers or {},
+        )
+
+    def test_guest_lift_is_not_forwarded(self, client, monkeypatch):
+        calls = self._capture(monkeypatch)
+        assert self._log(client, "squat", 100).status_code == 200
+        assert calls == []
+
+    def test_incomplete_total_is_not_forwarded(self, client, monkeypatch):
+        calls = self._capture(monkeypatch)
+        assert self._log(client, "squat", 100, self.AUTH).status_code == 200
+        assert self._log(client, "bench", 80, self.AUTH).status_code == 200
+        assert calls == []
+
+    def test_full_total_forwards_best_one_rms(self, client, monkeypatch):
+        calls = self._capture(monkeypatch)
+        self._log(client, "squat", 100, self.AUTH)  # 1RM 116.7
+        self._log(client, "squat", 120, self.AUTH)  # 1RM 140.0 — the best
+        self._log(client, "bench", 80, self.AUTH)  # 1RM 93.3
+        self._log(client, "deadlift", 140, self.AUTH)  # 1RM 163.3 — completes the total
+        assert len(calls) == 1
+        call = calls[0]
+        assert call["bearer"] == "Bearer test-token"
+        assert call["sex"] == "M"
+        assert call["bodyweight_kg"] == 85
+        assert call["bests"] == {"squat": 140.0, "bench": 93.3, "deadlift": 163.3}
+
+    def test_forwarding_failure_does_not_fail_rank(self, client, monkeypatch):
+        def boom(*args, **kwargs):
+            raise RuntimeError("leaderboards down")
+
+        monkeypatch.setattr(app_module, "submit_bests", boom)
+        self._log(client, "squat", 100, self.AUTH)
+        self._log(client, "bench", 80, self.AUTH)
+        r = self._log(client, "deadlift", 140, self.AUTH)
+        assert r.status_code == 200
 
 
 # ── GET /api/users/<username>/history ────────────────────────────────────────
