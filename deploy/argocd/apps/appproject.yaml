@@ -12,12 +12,20 @@ spec:
   sourceRepos:
     - https://github.com/sagivperetz04-hue/myfitnessrank.git
     - https://prometheus-community.github.io/helm-charts
-  # Only the in-cluster API server, and only these two namespaces.
+  # Only the in-cluster API server, and only these namespaces. kube-system is
+  # needed by kube-prometheus-stack, which places scrape Services there
+  # (a sync with any forbidden resource fails as a whole).
   destinations:
     - server: https://kubernetes.default.svc
-      namespace: myfitnessrank
+      namespace: myfitnessrank-dev
+    - server: https://kubernetes.default.svc
+      namespace: myfitnessrank-staging
+    - server: https://kubernetes.default.svc
+      namespace: myfitnessrank-prod
     - server: https://kubernetes.default.svc
       namespace: monitoring
+    - server: https://kubernetes.default.svc
+      namespace: kube-system
   # kube-prometheus-stack ships cluster-scoped CRDs/ClusterRoles, so cluster
   # resources are allowed; namespaced resources are unrestricted within the
   # whitelisted destination namespaces above.
