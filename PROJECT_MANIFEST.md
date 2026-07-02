@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-02, branch `feature/RND-008-leaderboard-sync`.
+> Last updated: 2026-07-02, branch `feature/RND-009-top200-mail`.
 
 ---
 
@@ -108,7 +108,8 @@ Public leaderboards + authenticated lift submission. Own Postgres, seeded with a
 | File | What it does |
 |---|---|
 | `app.py` | Routes; extracts `Bearer` tokens and verifies them |
-| `services/board.py` | `top_entries` (read leaderboard) and `submit_lift` (write, upsert-best) |
+| `services/board.py` | `top_entries` (read leaderboard), `submit_lift` (write, upsert-best, returns rank + notify meta), `mark_notified` (stamps `notified_at` after the top-200 mail) |
+| `services/mailer.py` | RND-009: top-200 congratulations/verification mail via stdlib `smtplib`. Env: `SMTP_HOST` (unset = mail is logged, not sent — local/dev default), `SMTP_PORT`, `SMTP_STARTTLS`, `MAIL_FROM`, `SMTP_USER`/`SMTP_PASSWORD` from an optional secret. Recipient email comes from the JWT claims. Sent once per entry: only when rank ≤ 200 and `notified_at IS NULL`; stamped only after a successful send so failures retry on the next submit. Asks for lift video + bodyweight photo within 7 days (manual verification for now) |
 | `services/tokens.py` | Verifies the auth service's JWTs (shared signing key — no call to auth needed per request) |
 | `services/crypto.py` | Crypto helpers (cryptography lib) |
 | `scripts/seed_pool.csv` + `extract_seed.py` + `load_seed.py` | Seed dataset of lifters loaded into the DB by a Helm **seed Job** |
@@ -118,7 +119,7 @@ Public leaderboards + authenticated lift submission. Own Postgres, seeded with a
 |---|---|---|
 | GET | `/health/live`, `/health` | Standard split |
 | GET | `/api/leaderboards` | Top entries filtered by sex / weight class / lift |
-| POST | `/api/leaderboards/submit` | Requires valid JWT; positive-number validation on all lift fields |
+| POST | `/api/leaderboards/submit` | Requires valid JWT; positive-number validation on all lift fields; first time an entry ranks ≤ 200 it triggers the verification mail (RND-009) |
 | GET | `/metrics` | Prometheus |
 
 Tests: `test_board.py`, `test_crypto.py`, `test_extract.py`.
@@ -230,6 +231,7 @@ Local stand-in for EKS so the whole GitOps loop runs on one machine.
 6. Builds app images (`REBUILD=1` to force) and `kind load`s them into the node; tags are **sourced from Helm values** so git stays authoritative.
 7. Applies `root-app.yaml`; ArgoCD does the rest.
 8. Reconciles `global_standards` seed data in every env on every run.
+9. Reconciles the leaderboards schema in every env (`ADD COLUMN IF NOT EXISTS notified_at` — initdb only runs on fresh volumes).
 9. Auto-manages detached port-forwards: ArgoCD UI :8081, Grafana :3000; apps via ingress at `dev.localhost:8080`, `staging.localhost:8080`, and `localhost:8080` (prod).
 
 ### `./shutdown`

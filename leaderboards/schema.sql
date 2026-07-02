@@ -10,8 +10,13 @@ CREATE TABLE IF NOT EXISTS leaderboard_entries (
     deadlift_kg   NUMERIC(6,2) NOT NULL DEFAULT 0,
     total_kg      NUMERIC(7,2) NOT NULL,
     bw_ratio      NUMERIC(6,4) GENERATED ALWAYS AS (total_kg / bodyweight_kg) STORED,
-    updated_at    TIMESTAMPTZ DEFAULT NOW()
+    updated_at    TIMESTAMPTZ DEFAULT NOW(),
+    notified_at   TIMESTAMPTZ                  -- when the top-200 mail went out; NULL = not yet
 );
+
+-- Existing databases predate notified_at; initdb only runs on fresh volumes,
+-- so ./start replays this reconcile against live DBs (idempotent).
+ALTER TABLE leaderboard_entries ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
 
 -- One leaderboard row per user per sex. Partial unique index is also the
 -- ON CONFLICT target for the overwrite-when-better upsert in services/board.py.

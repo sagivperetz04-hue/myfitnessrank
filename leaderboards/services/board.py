@@ -14,6 +14,8 @@ DEFAULT_SORT = "total"
 
 VALID_SEXES = ("M", "F")
 MAX_LIMIT = 200
+# Ranking at or above this triggers the congratulations/verification mail
+TOP_N = 200
 
 
 def sort_column(sort: str) -> str:
@@ -70,11 +72,14 @@ def submit_lift(
     bench_kg: float,
     deadlift_kg: float,
     bodyweight_kg: float,
-) -> dict:
+) -> tuple[dict, dict]:
     """Upsert the user's row, keeping the best of each lift (overwrite-when-better).
 
     One row per (sex, user_id). total_kg is recomputed from the kept per-lift
     bests; bw_ratio is a generated column that follows total_kg automatically.
+
+    Returns (public_entry, meta) — meta carries the row id and notified_at so
+    the caller can decide whether the top-200 mail is still owed.
     """
     name_enc = encrypt_name(username)
     total_kg = squat_kg + bench_kg + deadlift_kg
@@ -96,8 +101,8 @@ def submit_lift(
                               + GREATEST(leaderboard_entries.bench_kg, EXCLUDED.bench_kg)
                               + GREATEST(leaderboard_entries.deadlift_kg, EXCLUDED.deadlift_kg),
                 updated_at    = NOW()
-            RETURNING name_enc, bodyweight_kg, squat_kg, bench_kg, deadlift_kg,
-                      total_kg, bw_ratio, source
+            RETURNING id, notified_at, name_enc, bodyweight_kg, squat_kg, bench_kg,
+                      deadlift_kg, total_kg, bw_ratio, source
             """,
             (
                 sex,
@@ -118,4 +123,15 @@ def submit_lift(
         )
         rank = cur.fetchone()["rank"]
     conn.commit()
-    return _row_to_public(rank, row)
+    meta = {"id": row["id"], "notified_at": row["notified_at"]}
+    return _row_to_public(rank, row), meta
+
+
+def mark_notified(conn, entry_id: int) -> None:
+    """Stamp an entry after its top-200 mail went out, so it is sent only once."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE leaderboard_entries SET notified_at = NOW() WHERE id = %s",
+            (entry_id,),
+        )
+    conn.commit()
