@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-02, branch `feature/RND-007-frontend-redesign`.
+> Last updated: 2026-07-02, branch `docs/manifest-meet-day-design`.
 
 ---
 
@@ -129,7 +129,36 @@ Tests: `test_board.py`, `test_crypto.py`, `test_extract.py`.
 
 React 18 + Vite, served by **unprivileged nginx** which doubles as the API gateway.
 
-**Visual design (RND-007, chart 0.2.0):** "meet day" system — chalk-white background, ink woodtype (Big Shoulders Display + Barlow via Google Fonts `<link>`), IPF competition plate colors (red/blue/yellow/green) as the only accents, judges'-lights reveal on the result scorecard, loaded-bar header rule. Tokens live in `src/App.css` `:root`; tier text colors in `src/tiers.js`. Respects `prefers-reduced-motion`.
+### Visual design (RND-007 — "meet day", chart 0.2.0)
+
+The UI borrows the visual world of a powerlifting meet: bright chalk hall, ink woodtype, IPF competition plate colors as the only accents. All tokens live in `src/App.css` `:root`; tier text colors in `src/tiers.js` (darkened for the light background). Fonts load via a Google Fonts `<link>` in `index.html` — no npm dependency.
+
+| Token | Value | Role |
+|---|---|---|
+| `--chalk` | `#f1f1ed` | page background |
+| `--paper` | `#fbfaf7` | cards/panels (always with 2px `--ink` borders) |
+| `--ink` | `#1a1815` | text, borders, table headers, judges' panel |
+| `--steel` | `#6c6963` | muted text, labels |
+| `--red` | `#d2312b` | IPF 25kg plate — primary actions, active tab, wordmark flood |
+| `--blue` | `#2447c5` | 20kg plate — focus rings, active sort column |
+| `--yellow` | `#e9b90f` | 15kg plate — sort hover (sparingly) |
+| `--green` | `#2f9e44` | 10kg plate — success states |
+
+**Type:** Big Shoulders Display 600/800/900 (`--display`) for the wordmark, tabs, buttons, and big numerals; Barlow 400–700 (`--body`) for everything else. Data cells use `tabular-nums`.
+
+Per page/component:
+
+| Page / component | Design |
+|---|---|
+| Login | Meet poster: oversized wordmark (`RANK` in a red flood block), letterspaced uppercase tagline, ink-bordered paper card, woodtype Log in / Sign up tabs (active = ink flood) |
+| App header | Scoreboard strip: wordmark left, username form + exit right, status line below; divider is a **loaded bar** — plate stack (red/blue/yellow/green, descending) on a 3px bar, drawn with layered CSS gradients (`header::after`) |
+| Nav | Attempt cards: woodtype uppercase, 2px ink borders, active = red flood white text, hover lifts 2px |
+| Lift form | Uppercase steel labels, white inputs with 2px borders (blue on focus), red woodtype "Get my rank" submit |
+| Scorecard (result) | **Signature element.** Ink judges' panel: three lamps flip on left→right (staggered 0.25/0.55/0.85s; three whites = good lift) then a "GOOD LIFT" call fades in; the 1RM lands as a giant woodtype number (clamp 4–6.5rem) with a red `kg` unit; weight class below; tier plate badges in a row |
+| History / Leaderboard | Record boards: ink header row in woodtype, hairline row rules, blue active sort column, top-3 ranks in red woodtype |
+| Intro overlay | Existing barbell-lift animation restyled onto chalk; lifter name slams in as ink woodtype |
+
+Quality floor: `prefers-reduced-motion` collapses all animation (count-up included), `:focus-visible` shows a 2px blue outline, single-column breakpoint at 560px.
 
 ### Application code
 | File | What it does |
