@@ -1,0 +1,4 @@
+# staging overlay for helm/frontend — host-routed at http://staging.localhost:8080.
+replicaCount: 1
+ingress:
+  host: staging.localhost

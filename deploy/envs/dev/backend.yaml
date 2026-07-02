@@ -1,0 +1,9 @@
+# dev overlay for helm/backend — single replica, halved resources.
+replicaCount: 1
+resources:
+  requests:
+    cpu: 50m
+    memory: 96Mi
+  limits:
+    cpu: 250m
+    memory: 192Mi

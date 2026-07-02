@@ -1,0 +1,62 @@
+# One Application per (environment x service), replacing the previous
+# hand-written per-service Applications. Environments are namespaces on the
+# single cluster: myfitnessrank-{dev,staging,prod}.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: myfitnessrank-services
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          # Promotion model: dev tracks the dev branch (sandbox); staging and
+          # prod both track master — prod's pinned image tags live in its
+          # values overlay and only move on release.
+          - list:
+              elements:
+                - env: dev
+                  revision: dev
+                - env: staging
+                  revision: master
+                - env: prod
+                  revision: master
+          - list:
+              elements:
+                - service: backend
+                - service: auth
+                - service: leaderboards
+                - service: frontend
+                - service: postgres
+                - service: postgres-auth
+                - service: postgres-leaderboards
+  template:
+    metadata:
+      name: '{{.service}}-{{.env}}'
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: myfitnessrank
+      # Multi-source: the chart itself, plus the same repo again under the
+      # `values` ref so valueFiles can point outside the chart directory.
+      sources:
+        - repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
+          targetRevision: '{{.revision}}'
+          path: helm/{{.service}}
+          helm:
+            valueFiles:
+              - $values/deploy/envs/{{.env}}/{{.service}}.yaml
+        - repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
+          targetRevision: '{{.revision}}'
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'myfitnessrank-{{.env}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

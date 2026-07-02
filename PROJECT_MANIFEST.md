@@ -24,6 +24,7 @@ ArgoCD ──watches master──► deploys everything (app-of-apps)
 ```
 
 Key decisions:
+- **Environments as namespaces** — dev/staging/prod are namespaces (`myfitnessrank-<env>`) on the single cluster (one EKS control plane later, not three). Each env has its own Postgres trio and independently generated secrets. Promotion: dev tracks the `dev` branch, staging tracks `master`, prod tracks `master` with image tags pinned in its values overlay. Local access: `dev.localhost:8080`, `staging.localhost:8080`, prod at `localhost:8080` (catch-all).
 - **Database-per-service** — each service owns its schema; no shared tables.
 - **JWT between services** — auth issues tokens; leaderboards verifies them independently.
 - **Frontend nginx is the API gateway** — no service is exposed outside the cluster directly.
@@ -181,6 +182,10 @@ Every chart contains `Chart.yaml`, `values.yaml`, `deployment.yaml`, `service.ya
 
 Leaderboards chart additionally has `seed-job.yaml` — a Job that loads the seed lifter pool.
 
+Charts hold the defaults; per-environment differences live in small values overlays under
+`deploy/envs/<env>/<service>.yaml` — replicas/resources (dev/staging run lighter), the
+frontend ingress host per env, and prod's pinned image tags (the promotion gate).
+
 ### Postgres charts (x3, one per service DB)
 - StatefulSet + headless Service, `postgres:15.18-alpine` pinned.
 - `configmap-initdb.yaml` mounts `files/initdb/*.sql` → schema (and seed data for the main DB) applied automatically on first boot.
@@ -196,8 +201,7 @@ App-of-apps pattern; `root-app.yaml` is the **only** manifest ever applied by ha
 |---|---|
 | `root-app.yaml` | Root Application → syncs `deploy/argocd/apps/` from `master` |
 | `apps/appproject.yaml` | `myfitnessrank` AppProject — scopes what the child apps may deploy (least privilege vs. `default`) |
-| `apps/backend.yaml`, `auth.yaml`, `leaderboards.yaml`, `frontend.yaml` | One Application per service chart |
-| `apps/postgres*.yaml` | One Application per database |
+| `apps/services.yaml` | ApplicationSet: matrix generator (3 envs × 7 services) → 21 Applications named `<service>-<env>`, each multi-source (chart + `$values` ref to `deploy/envs/<env>/<service>.yaml`), destination `myfitnessrank-<env>`; dev apps track the `dev` branch, staging/prod track `master` |
 | `apps/kube-prometheus-stack.yaml` | Upstream chart from the prometheus-community Helm repo (see §10) |
 | `apps/monitoring.yaml` | Our `helm/monitoring` chart (ServiceMonitor + dashboard) |
 
@@ -206,7 +210,8 @@ Conventions used:
 - **Sync waves** order dependencies (kube-prometheus-stack CRDs at wave 1 before the ServiceMonitor at wave 2).
 - `ServerSideApply=true` where CRDs exceed the client-side annotation size limit.
 - `ignoreDifferences` on the admission webhook `caBundle` (the chart patches itself in-cluster; without this ArgoCD reports permanent OutOfSync).
-- All apps track `master` (deliberate: feature branches never deploy).
+- Promotion model: `dev` branch → dev namespace (sandbox), `master` → staging and prod (prod's image tags are pinned in its overlay and only move on release). Feature branches never deploy.
+- The AppProject also permits `kube-system` — kube-prometheus-stack places control-plane scrape Services there, and a sync containing any forbidden resource fails as a whole.
 
 ---
 
@@ -219,11 +224,11 @@ Local stand-in for EKS so the whole GitOps loop runs on one machine.
 2. Creates (or restarts) the `myfitnessrank` kind cluster from `deploy/kind/kind-config.yaml`.
 3. Installs ingress-nginx (kind provider manifest, pinned version) and ArgoCD (pinned version, server-side apply).
 4. Owns the ArgoCD admin password across reinstalls — stored in `~/.config/myfitnessrank/` (outside the repo so it can never be committed).
-5. Creates the out-of-band Secrets (DB credentials, JWT signing key, `grafana-admin`).
+5. Creates the three env namespaces and, per env, independently generated out-of-band Secrets (DB credentials ×3, JWT signing key, Fernet key), plus `grafana-admin` in `monitoring`.
 6. Builds app images (`REBUILD=1` to force) and `kind load`s them into the node; tags are **sourced from Helm values** so git stays authoritative.
 7. Applies `root-app.yaml`; ArgoCD does the rest.
-8. Reconciles `global_standards` seed data on every run.
-9. Auto-manages detached port-forwards: ArgoCD UI :8081, Grafana :3000; app at `http://localhost:8080` via ingress.
+8. Reconciles `global_standards` seed data in every env on every run.
+9. Auto-manages detached port-forwards: ArgoCD UI :8081, Grafana :3000; apps via ingress at `dev.localhost:8080`, `staging.localhost:8080`, and `localhost:8080` (prod).
 
 ### `./shutdown`
 - Default: gracefully stops the node container — cluster + DB data preserved (pairs with `./start`).
@@ -239,13 +244,14 @@ Local stand-in for EKS so the whole GitOps loop runs on one machine.
 - Values hardening: 2d retention + resource requests (kind-friendly), Grafana admin from the pre-created `grafana-admin` Secret (never in values), `*SelectorNilUsesHelmValues: false` so it discovers ServiceMonitors cluster-wide.
 
 ### Our chart (`helm/monitoring/`)
-- `servicemonitor.yaml` — one ServiceMonitor selecting `app: myfitnessrank` Services in the `myfitnessrank` namespace on the `http` port at `/metrics`, 30s interval. Frontend is excluded via `component NotIn (frontend)` (nginx 404s on /metrics → would be a permanently-down target); Postgres is naturally excluded (no `http`-named port).
-- `dashboard-configmap.yaml` + `dashboards/myfitnessrank.json` — Grafana dashboard auto-imported by the sidecar via the `grafana_dashboard` label.
+- `servicemonitor.yaml` — one ServiceMonitor selecting `app: myfitnessrank` Services across all three env namespaces (`appNamespaces` in values) on the `http` port at `/metrics`, 30s interval → 9 targets (3 services × 3 envs). Frontend is excluded via `component NotIn (frontend)` (nginx 404s on /metrics → would be a permanently-down target); Postgres is naturally excluded (no `http`-named port).
+- `dashboard-configmap.yaml` + `dashboards/myfitnessrank.json` — Grafana dashboard auto-imported by the sidecar via the `grafana_dashboard` label; a `namespace` template variable filters panels per environment, legends read `namespace/service`.
+- Control-plane scrape components that bind to 127.0.0.1 on kind (controller-manager, scheduler, etcd, kube-proxy) are disabled in the kube-prometheus-stack values — unreachable targets would show permanently down. CoreDNS stays enabled.
 
 ### App instrumentation
 - All three Flask services expose `/metrics` via `prometheus-flask-exporter` with **gunicorn multiprocess mode** (per-worker counters aggregated through `PROMETHEUS_MULTIPROC_DIR`) — without this, scrapes would return only one random worker's numbers.
 
-Status: built and hardened on `feature/RND-005-monitoring`; **not yet merged to master**.
+Status: merged to master (PR #4, 2026-07-02). First live sync exposed an AppProject gap — the stack's `kube-system` scrape Services were forbidden, failing the whole sync — fixed alongside the environments work (RND-006).
 
 ---
 
@@ -290,8 +296,8 @@ practices we intend to follow, so a section can be lifted straight into an RND t
 
 ## 13. Immediate follow-ups (this repo)
 
-- [ ] Merge `feature/RND-005-monitoring` → master via PR (CI green).
-- [ ] Run `./start` end-to-end after merge; verify Prometheus targets (3 up, frontend absent) and the Grafana dashboard.
+- [x] Merge `feature/RND-005-monitoring` → master (PR #4).
+- [ ] Run `./start` end-to-end after the RND-006 merge; verify Prometheus targets (9 up: 3 services × 3 envs) and the Grafana dashboard.
 - [x] Update `.claude/context.md` to reflect the microservice architecture.
 - [x] CI: build the frontend image and push **all four images** to per-service ECR repositories (`myfitnessrank/<service>`).
 
