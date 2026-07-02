@@ -53,6 +53,8 @@ spec:
                   key: database
             - name: DATABASE_URL
               value: "postgresql://$(DB_USER):$(DB_PASSWORD)@{{ .Values.db.host }}:{{ .Values.db.port }}/$(DB_NAME)"
+            - name: LEADERBOARDS_URL
+              value: {{ .Values.leaderboardsUrl | quote }}
           readinessProbe:
             httpGet:
               path: /health
