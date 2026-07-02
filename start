@@ -132,6 +132,16 @@ if ! kubectl -n "$APP_NS" get secret leaderboards-enc-key >/dev/null 2>&1; then
     --from-literal=fernet-key="$(openssl rand -base64 32 | tr '+/' '-_')"
 fi
 
+# Monitoring stack runs in its own namespace. Create it + the create-once Grafana
+# admin secret up front so the kube-prometheus-stack app finds them on first sync.
+kubectl get namespace monitoring >/dev/null 2>&1 || kubectl create namespace monitoring
+if ! kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1; then
+  log "Creating Grafana admin secret"
+  kubectl -n monitoring create secret generic grafana-admin \
+    --from-literal=admin-user=admin \
+    --from-literal=admin-password="$(openssl rand -hex 16)"
+fi
+
 # ArgoCD's bundled initial-admin password is regenerated on every fresh install.
 # Own it instead: persist a password locally (create-once, outside git) and stamp
 # it into argocd-secret only when ArgoCD was just installed — so normal reboots
@@ -205,7 +215,24 @@ nohup kubectl -n argocd port-forward svc/argocd-server "${ARGOCD_PF_PORT}:443" \
   >/tmp/argocd-port-forward.log 2>&1 &
 disown
 
+# Grafana, same pattern. The service only exists once the kube-prometheus-stack
+# app has synced (minutes on first install), so this forwarder may fail on the
+# first run and succeed on a later ./start — harmless, logged like ArgoCD's.
+GRAFANA_PF_PORT=3000
+GRAFANA_SVC=kube-prometheus-stack-grafana
+if kubectl -n monitoring get svc "$GRAFANA_SVC" >/dev/null 2>&1; then
+  log "Starting Grafana port-forward (localhost:${GRAFANA_PF_PORT})"
+  pkill -f "port-forward svc/${GRAFANA_SVC} ${GRAFANA_PF_PORT}:80" 2>/dev/null || true
+  nohup kubectl -n monitoring port-forward "svc/${GRAFANA_SVC}" "${GRAFANA_PF_PORT}:80" \
+    >/tmp/grafana-port-forward.log 2>&1 &
+  disown
+else
+  log "Grafana service not ready yet (kube-prometheus-stack still syncing) — re-run ./start later for the UI"
+fi
+
 log "Ready"
 echo "App:       http://localhost:8080"
 echo "ArgoCD UI: https://localhost:${ARGOCD_PF_PORT}  (port-forward running in background; log: /tmp/argocd-port-forward.log)"
 echo "           user: admin   password: cat ${ARGOCD_PW_FILE}"
+echo "Grafana:   http://localhost:${GRAFANA_PF_PORT}  (once kube-prometheus-stack has synced; log: /tmp/grafana-port-forward.log)"
+echo "           user: admin   password: kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d"
