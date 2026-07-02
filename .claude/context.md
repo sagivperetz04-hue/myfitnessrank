@@ -41,6 +41,14 @@ Browser
 Every service exposes `/health` (readiness, DB ping), `/health/live` (liveness, dependency-free),
 and `/metrics` (Prometheus, gunicorn multiprocess-aware).
 
+**Environments:** dev / staging / prod are namespaces on the single cluster
+(`myfitnessrank-<env>`), each with its own Postgres trio and independently generated
+secrets. Promotion: `dev` branch → dev, `master` → staging and prod (prod's image tags
+are pinned in `deploy/envs/prod/`). Per-env config lives in `deploy/envs/<env>/` values
+overlays; ArgoCD generates one Application per (env × service) from a single
+ApplicationSet. Local access: `dev.localhost:8080`, `staging.localhost:8080`,
+prod at `localhost:8080`.
+
 ---
 
 ## Data Model
@@ -98,7 +106,8 @@ The `schema.sql` in each service directory is the source of truth. Summary:
 | Container registry | AWS ECR | Pending (Terraform) |
 | K8s cluster | AWS EKS | Pending (Terraform); kind locally |
 | IaC | Terraform + terraform-aws-modules + Terragrunt | Pending |
-| GitOps | ArgoCD, app-of-apps, tracks `master` | Done (local cluster) |
+| GitOps | ArgoCD, app-of-apps + ApplicationSet (env × service) | Done (local cluster) |
+| Environments | dev/staging/prod namespaces on one cluster (cost: one control plane) | Done (local) |
 | CI | GitHub Actions (SHA-pinned actions, OIDC to AWS) | Done; deploy workflows pending |
 | Monitoring | Prometheus + Grafana via kube-prometheus-stack | Done (RND-005) |
 | Logging | Elasticsearch + Kibana (or CloudWatch) | TBD |
@@ -116,7 +125,8 @@ myfitnessrank-app/         ← this repo
   helm/                    # one chart per service + per-DB postgres charts + monitoring
   deploy/
     kind/                  # local cluster config
-    argocd/                # root app + one Application per service (app-of-apps)
+    argocd/                # root app + AppProject + services ApplicationSet + monitoring apps
+    envs/                  # per-environment values overlays (dev/staging/prod × service)
   .github/workflows/
     ci.yml                 # lint + test + build (+ ECR push on master)
                            # deploy-staging.yml / deploy-production.yml: planned
