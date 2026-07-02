@@ -17,6 +17,17 @@
         "hide": 0,
         "current": {},
         "refresh": 1
+      },
+      {
+        "name": "namespace",
+        "label": "environment",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": "label_values(flask_http_request_total, namespace)",
+        "includeAll": true,
+        "multi": true,
+        "current": {},
+        "refresh": 2
       }
     ]
   },
@@ -32,8 +43,8 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum by (service) (rate(flask_http_request_total[5m]))",
-          "legendFormat": "{{service}}"
+          "expr": "sum by (namespace, service) (rate(flask_http_request_total{namespace=~\"$namespace\"}[5m]))",
+          "legendFormat": "{{namespace}}/{{service}}"
         }
       ]
     },
@@ -48,8 +59,8 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "histogram_quantile(0.95, sum by (service, le) (rate(flask_http_request_duration_seconds_bucket[5m])))",
-          "legendFormat": "{{service}}"
+          "expr": "histogram_quantile(0.95, sum by (namespace, service, le) (rate(flask_http_request_duration_seconds_bucket{namespace=~\"$namespace\"}[5m])))",
+          "legendFormat": "{{namespace}}/{{service}}"
         }
       ]
     },
@@ -64,8 +75,8 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum by (service) (rate(flask_http_request_total{status=~\"5..\"}[5m]))",
-          "legendFormat": "{{service}}"
+          "expr": "sum by (namespace, service) (rate(flask_http_request_total{namespace=~\"$namespace\", status=~\"5..\"}[5m]))",
+          "legendFormat": "{{namespace}}/{{service}}"
         }
       ]
     }

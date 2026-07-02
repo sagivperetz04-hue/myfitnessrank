@@ -1,0 +1,9 @@
+# staging overlay for helm/postgres — reduced resources; persistence and security
+# settings come from the chart defaults.
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi

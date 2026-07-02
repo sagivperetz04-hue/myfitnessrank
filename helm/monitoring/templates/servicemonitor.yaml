@@ -5,10 +5,10 @@ metadata:
   labels:
     app: {{ .Values.appLabel }}
 spec:
-  # Select the web services in the app namespace by their shared label.
+  # Select the web services in every environment namespace by their shared label.
   namespaceSelector:
     matchNames:
-      - {{ .Values.appNamespace }}
+      {{- toYaml .Values.appNamespaces | nindent 6 }}
   selector:
     matchLabels:
       app: {{ .Values.appLabel }}
