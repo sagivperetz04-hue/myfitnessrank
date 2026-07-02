@@ -177,6 +177,13 @@ jobs:
             --tag myfitnessrank/leaderboards:${{ github.sha }} \
             leaderboards/
 
+      - name: Build frontend Docker image
+        run: |
+          docker build \
+            --no-cache \
+            --tag myfitnessrank/frontend:${{ github.sha }} \
+            frontend/
+
       # Checks whether AWS secrets are configured. Secrets cannot be referenced
       # in if: expressions directly — expose via step output instead.
       - name: Check AWS secrets are configured
@@ -203,12 +210,15 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@fa648b43de3d4d023bcb3f89ed6940096949c419  # v2.1.5
 
+      # One ECR repository per service, named myfitnessrank/<service> — must match
+      # the repositories Terraform creates in the infra repo.
       - name: Push to ECR
         if: steps.aws-check.outputs.ready == 'true'
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker tag myfitnessrank/backend:$IMAGE_TAG $REGISTRY/$REPOSITORY:$IMAGE_TAG
-          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+          for service in backend auth leaderboards frontend; do
+            docker tag "myfitnessrank/${service}:${IMAGE_TAG}" "${REGISTRY}/myfitnessrank/${service}:${IMAGE_TAG}"
+            docker push "${REGISTRY}/myfitnessrank/${service}:${IMAGE_TAG}"
+          done
