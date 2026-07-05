@@ -59,5 +59,5 @@ deploy/
   argocd/apps/*.yaml        # one ArgoCD Application per helm chart
 ```
 
-In production these Application manifests move to the separate gitops repo;
+In production ArgoCD on EKS syncs these same manifests from this repo (`master`);
 `targetRevision` here points at the feature branch for local iteration.

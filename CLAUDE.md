@@ -30,8 +30,9 @@ myfitnessrank-app/
 ```
 
 Related repositories (separate repos, not this one):
-- **gitops repo** — ArgoCD ApplicationSets, per-env K8s state
 - **infra repo** — Terraform modules (VPC, EKS, ECR, S3, helm installs)
+
+GitOps state (ArgoCD ApplicationSets, per-env K8s overlays) lives **in this repo** under `deploy/argocd/` and `deploy/envs/` — no separate gitops repo.
 
 ## Authoritative Files — Read Before Generating Content
 
