@@ -17,6 +17,22 @@ MAX_LIMIT = 200
 # Ranking at or above this triggers the congratulations/verification mail
 TOP_N = 200
 
+# Per-lift ceilings (kg) this service enforces on every submission. The board is
+# internet-reachable through the frontend proxy, so it cannot trust the backend
+# to be the only caller — it validates independently. Must stay in sync with
+# _WORLD_RECORDS_KG in backend/app.py and WORLD_RECORDS in frontend/src/App.jsx.
+WORLD_RECORDS_KG = {
+    "squat_kg": 525.0,
+    "bench_kg": 355.0,
+    "deadlift_kg": 505.0,
+}
+WR_MARGIN_KG = 2.0
+
+
+def lift_cap(field: str) -> float:
+    """Max accepted value (kg) for a per-lift field: world record + margin."""
+    return WORLD_RECORDS_KG[field] + WR_MARGIN_KG
+
 
 def sort_column(sort: str) -> str:
     """Resolve a public sort key to its column, falling back to total."""
