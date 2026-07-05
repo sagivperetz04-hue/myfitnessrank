@@ -6,6 +6,9 @@ import pytest
 
 TEST_DB_URL = "postgresql://postgres:testpass@localhost:5433/fitrank_test"
 os.environ["DATABASE_URL"] = TEST_DB_URL
+# Verified by /api/rank when a signed-in lift carries a Bearer token. Clearly a
+# throwaway test key — never a real signing secret.
+os.environ.setdefault("JWT_SIGNING_KEY", "test-signing-key-not-for-prod")
 
 from app import app as flask_app  # noqa: E402 — env must be set before import
 
@@ -74,3 +77,26 @@ def app():
 @pytest.fixture()
 def client(app):
     return app.test_client()
+
+
+@pytest.fixture()
+def make_token():
+    """Mint a valid access token the way the auth service does."""
+    import time as _time
+
+    import jwt
+
+    def _make(username: str = "testuser", sub: str = "1", **overrides):
+        claims = {
+            "sub": sub,
+            "email": f"{username}@example.com",
+            "username": username,
+            "type": "access",
+            "iss": "myfitnessrank-auth",
+            "iat": int(_time.time()),
+            "exp": int(_time.time()) + 900,
+            **overrides,
+        }
+        return jwt.encode(claims, os.environ["JWT_SIGNING_KEY"], algorithm="HS256")
+
+    return _make

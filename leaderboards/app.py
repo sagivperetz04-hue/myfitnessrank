@@ -4,7 +4,15 @@ import os
 from flask import Flask, g, jsonify, request
 
 from db import get_connection, return_connection
-from services.board import TOP_N, VALID_SEXES, mark_notified, top_entries, submit_lift
+from services.board import (
+    TOP_N,
+    VALID_SEXES,
+    WORLD_RECORDS_KG,
+    lift_cap,
+    mark_notified,
+    top_entries,
+    submit_lift,
+)
 from services.mailer import send_top200_mail
 from services.tokens import TokenError, decode_access
 
@@ -132,6 +140,14 @@ def submit():
         value = _positive_number(body, field)
         if value is None:
             return jsonify({"error": f"{field} must be a positive number"}), 400
+        # A total is only credible if each lift is; reject anything past the
+        # world record so a direct POST can't manufacture a #1 entry.
+        if field in WORLD_RECORDS_KG and value > lift_cap(field):
+            return jsonify(
+                {
+                    "error": f"{field} exceeds the accepted maximum of {lift_cap(field)} kg"
+                }
+            ), 400
         lifts[field] = value
 
     try:

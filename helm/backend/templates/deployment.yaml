@@ -55,6 +55,11 @@ spec:
               value: "postgresql://$(DB_USER):$(DB_PASSWORD)@{{ .Values.db.host }}:{{ .Values.db.port }}/$(DB_NAME)"
             - name: LEADERBOARDS_URL
               value: {{ .Values.leaderboardsUrl | quote }}
+            - name: JWT_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.jwt.existingSecret }}
+                  key: {{ .Values.jwt.secretKey }}
           readinessProbe:
             httpGet:
               path: /health

@@ -190,8 +190,6 @@ class TestRankValidation:
 class TestRankLeaderboardSync:
     """Signed-in lifts are forwarded to the leaderboards service; guests are not."""
 
-    AUTH = {"Authorization": "Bearer test-token"}
-
     def _capture(self, monkeypatch):
         calls = []
         monkeypatch.setattr(
@@ -215,39 +213,78 @@ class TestRankLeaderboardSync:
             headers=headers or {},
         )
 
+    def _auth(self, make_token, username="testuser"):
+        return {"Authorization": f"Bearer {make_token(username=username)}"}
+
     def test_guest_lift_is_not_forwarded(self, client, monkeypatch):
         calls = self._capture(monkeypatch)
         assert self._log(client, "squat", 100).status_code == 200
         assert calls == []
 
-    def test_incomplete_total_is_not_forwarded(self, client, monkeypatch):
+    def test_incomplete_total_is_not_forwarded(self, client, monkeypatch, make_token):
         calls = self._capture(monkeypatch)
-        assert self._log(client, "squat", 100, self.AUTH).status_code == 200
-        assert self._log(client, "bench", 80, self.AUTH).status_code == 200
+        auth = self._auth(make_token)
+        assert self._log(client, "squat", 100, auth).status_code == 200
+        assert self._log(client, "bench", 80, auth).status_code == 200
         assert calls == []
 
-    def test_full_total_forwards_best_one_rms(self, client, monkeypatch):
+    def test_full_total_forwards_best_one_rms(self, client, monkeypatch, make_token):
         calls = self._capture(monkeypatch)
-        self._log(client, "squat", 100, self.AUTH)  # 1RM 116.7
-        self._log(client, "squat", 120, self.AUTH)  # 1RM 140.0 — the best
-        self._log(client, "bench", 80, self.AUTH)  # 1RM 93.3
-        self._log(client, "deadlift", 140, self.AUTH)  # 1RM 163.3 — completes the total
+        auth = self._auth(make_token)
+        self._log(client, "squat", 100, auth)  # 1RM 116.7
+        self._log(client, "squat", 120, auth)  # 1RM 140.0 — the best
+        self._log(client, "bench", 80, auth)  # 1RM 93.3
+        self._log(client, "deadlift", 140, auth)  # 1RM 163.3 — completes the total
         assert len(calls) == 1
         call = calls[0]
-        assert call["bearer"] == "Bearer test-token"
+        assert call["bearer"] == auth["Authorization"]
         assert call["sex"] == "M"
         assert call["bodyweight_kg"] == 85
         assert call["bests"] == {"squat": 140.0, "bench": 93.3, "deadlift": 163.3}
 
-    def test_forwarding_failure_does_not_fail_rank(self, client, monkeypatch):
+    def test_forwarding_failure_does_not_fail_rank(
+        self, client, monkeypatch, make_token
+    ):
         def boom(*args, **kwargs):
             raise RuntimeError("leaderboards down")
 
         monkeypatch.setattr(app_module, "submit_bests", boom)
-        self._log(client, "squat", 100, self.AUTH)
-        self._log(client, "bench", 80, self.AUTH)
-        r = self._log(client, "deadlift", 140, self.AUTH)
+        auth = self._auth(make_token)
+        self._log(client, "squat", 100, auth)
+        self._log(client, "bench", 80, auth)
+        r = self._log(client, "deadlift", 140, auth)
         assert r.status_code == 200
+
+
+class TestRankIdentityIntegrity:
+    """A signed-in lift is recorded under the token identity, not the body."""
+
+    def test_token_username_overrides_body_username(self, client, make_token):
+        # Token says "realowner", body claims "victim" — the log must land on
+        # realowner and victim must stay empty.
+        headers = {"Authorization": f"Bearer {make_token(username='realowner')}"}
+        r = client.post(
+            "/api/rank",
+            json={**VALID, "username": "victim"},
+            headers=headers,
+        )
+        assert r.status_code == 200
+        assert client.get("/api/users/victim/history").status_code == 404
+        owner = client.get("/api/users/realowner/history").get_json()
+        assert len(owner["logs"]) == 1
+
+    def test_invalid_token_is_rejected_not_ignored(self, client):
+        r = client.post(
+            "/api/rank",
+            json=VALID,
+            headers={"Authorization": "Bearer not-a-real-jwt"},
+        )
+        assert r.status_code == 401
+
+    def test_guest_still_uses_body_username(self, client):
+        r = client.post("/api/rank", json={**VALID, "username": "guest_bob"})
+        assert r.status_code == 200
+        assert client.get("/api/users/guest_bob/history").get_json()["logs"]
 
 
 # ── GET /api/users/<username>/history ────────────────────────────────────────

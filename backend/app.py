@@ -11,6 +11,7 @@ from services.ranking import (
     get_percentile,
 )
 from services.leaderboard import get_top_lifters, submit_bests
+from services.tokens import TokenError, decode_access
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -112,7 +113,20 @@ def rank():
 
     exercise = body["exercise"]
     sex = str(body["sex"]).upper()
-    username = body["username"]
+
+    # A signed-in lift is recorded under the token's identity, never the body's:
+    # otherwise any authenticated user could write history under someone else's
+    # username. A present-but-invalid token is rejected rather than falling back
+    # to the body (that fallback would be the bypass). No token = guest mode,
+    # where the body username is trusted (browser-local, unauthenticated).
+    auth_header = request.headers.get("Authorization", "")
+    claims = None
+    if auth_header.startswith("Bearer "):
+        try:
+            claims = decode_access(auth_header[len("Bearer ") :])
+        except TokenError:
+            return jsonify({"error": "invalid or expired token"}), 401
+    username = claims["username"] if claims else body["username"]
 
     if not username or not str(username).strip():
         return jsonify({"error": "username must not be empty"}), 400
@@ -215,11 +229,10 @@ def rank():
         avg_tier,
     )
 
-    # Signed-in lifters feed the leaderboard; the leaderboards service takes
-    # identity from the token and dedups server-side (no verification yet).
-    bearer = request.headers.get("Authorization", "")
-    if bearer.startswith("Bearer "):
-        _sync_leaderboard(conn, user_id, sex, bodyweight_kg, bearer)
+    # Signed-in lifters feed the leaderboard; the leaderboards service re-verifies
+    # the same token and dedups server-side.
+    if claims:
+        _sync_leaderboard(conn, user_id, sex, bodyweight_kg, auth_header)
 
     return jsonify(
         {
