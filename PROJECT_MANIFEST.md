@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-02, branch `feature/RND-009-top200-mail`.
+> Last updated: 2026-07-05, branch `feature/RND-009-top200-mail`.
 
 ---
 
@@ -188,6 +188,8 @@ Leaderboards chart additionally has `seed-job.yaml` — a Job that loads the see
 Charts hold the defaults; per-environment differences live in small values overlays under
 `deploy/envs/<env>/<service>.yaml` — replicas/resources (dev/staging run lighter), the
 frontend ingress host per env, and prod's pinned image tags (the promotion gate).
+Current prod pins: auth 0.1.0, backend 0.1.1, leaderboards 0.1.0, frontend 0.2.0
+(meet-day redesign promoted 2026-07-05).
 
 ### Postgres charts (x3, one per service DB)
 - StatefulSet + headless Service, `postgres:15.18-alpine` pinned.
