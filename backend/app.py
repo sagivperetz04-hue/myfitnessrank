@@ -10,7 +10,7 @@ from services.ranking import (
     calculate_1rm,
     get_percentile,
 )
-from services.leaderboard import get_top_lifters
+from services.leaderboard import get_top_lifters, submit_bests
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -76,6 +76,30 @@ def health():
         log.error("health check db ping failed: %s", exc)
         return jsonify({"status": "error", "detail": "db unavailable"}), 503
     return jsonify({"status": "ok"}), 200
+
+
+def _sync_leaderboard(conn, user_id, sex, bodyweight_kg, bearer):
+    """Push the user's best lifts to the leaderboards service.
+
+    Best-effort: the lift is already logged, so a leaderboards outage must not
+    fail the rank response. The board needs a full total, so nothing is sent
+    until squat, bench, and deadlift have all been logged at least once.
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT exercise, MAX(one_rm_kg) AS best FROM workout_logs "
+                "WHERE user_id = %s AND exercise IN ('squat', 'bench', 'deadlift') "
+                "GROUP BY exercise",
+                (user_id,),
+            )
+            bests = {r["exercise"]: float(r["best"]) for r in cur.fetchall()}
+        if set(bests) != {"squat", "bench", "deadlift"}:
+            return
+        submit_bests(bearer, sex, bodyweight_kg, bests)
+        log.info("leaderboard sync ok user_id=%s sex=%s", user_id, sex)
+    except Exception as exc:
+        log.warning("leaderboard sync failed (lift still logged): %s", exc)
 
 
 @app.route("/api/rank", methods=["POST"])
@@ -190,6 +214,12 @@ def rank():
         avg_percentile,
         avg_tier,
     )
+
+    # Signed-in lifters feed the leaderboard; the leaderboards service takes
+    # identity from the token and dedups server-side (no verification yet).
+    bearer = request.headers.get("Authorization", "")
+    if bearer.startswith("Bearer "):
+        _sync_leaderboard(conn, user_id, sex, bodyweight_kg, bearer)
 
     return jsonify(
         {

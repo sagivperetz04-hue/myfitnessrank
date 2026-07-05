@@ -63,6 +63,28 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.encryption.existingSecret }}
                   key: {{ .Values.encryption.secretKey }}
+            {{- if .Values.smtp.host }}
+            - name: SMTP_HOST
+              value: {{ .Values.smtp.host | quote }}
+            - name: SMTP_PORT
+              value: {{ .Values.smtp.port | quote }}
+            - name: SMTP_STARTTLS
+              value: {{ .Values.smtp.starttls | quote }}
+            - name: MAIL_FROM
+              value: {{ .Values.smtp.from | quote }}
+            {{- if .Values.smtp.existingSecret }}
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.smtp.existingSecret }}
+                  key: user
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.smtp.existingSecret }}
+                  key: password
+            {{- end }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /health

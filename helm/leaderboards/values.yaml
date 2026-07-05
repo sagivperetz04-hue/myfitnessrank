@@ -2,8 +2,19 @@ replicaCount: 2
 
 image:
   repository: myfitnessrank-leaderboards
-  tag: "0.1.0"
+  tag: "0.1.1"
   pullPolicy: IfNotPresent
+
+# SMTP relay for the top-200 congratulations/verification mail. With host empty
+# (the default) mails are written to the service log instead of sent — safe for
+# local/dev. Credentials come from an existing secret (keys: user, password),
+# never from values.
+smtp:
+  host: ""
+  port: 587
+  starttls: true
+  from: no-reply@myfitnessrank.app
+  existingSecret: ""
 
 # For ECR: [{ name: ecr-registry-secret }]
 imagePullSecrets: []

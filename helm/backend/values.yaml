@@ -2,8 +2,12 @@ replicaCount: 2
 
 image:
   repository: myfitnessrank-backend
-  tag: "0.1.1"
+  tag: "0.1.2"
   pullPolicy: IfNotPresent
+
+# URL of the leaderboards service in the same namespace — /api/rank forwards
+# signed-in users' best lifts there
+leaderboardsUrl: http://leaderboards:5000
 
 # For ECR: [{ name: ecr-registry-secret }]
 imagePullSecrets: []

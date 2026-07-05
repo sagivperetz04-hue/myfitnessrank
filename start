@@ -216,6 +216,15 @@ for env in $ENVS; do
     || die "[$env] global standards re-seed failed"
 done
 
+# initdb only runs on fresh volumes, so schema additions must be replayed
+# against live DBs. ADD COLUMN IF NOT EXISTS is idempotent.
+log "Reconciling leaderboards schema"
+for env in $ENVS; do
+  kubectl -n "myfitnessrank-${env}" exec -i postgres-leaderboards-0 -- \
+    sh -c 'psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "ALTER TABLE leaderboard_entries ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ"' \
+    || die "[$env] leaderboards schema reconcile failed"
+done
+
 # A port-forward is process-bound and dies on host/cluster restart, so the
 # ArgoCD UI is unreachable after a reboot until it's relaunched. Reconcile it
 # here: drop any stale forwarder and start a fresh detached one.

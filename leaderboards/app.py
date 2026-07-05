@@ -4,7 +4,8 @@ import os
 from flask import Flask, g, jsonify, request
 
 from db import get_connection, return_connection
-from services.board import VALID_SEXES, top_entries, submit_lift
+from services.board import TOP_N, VALID_SEXES, mark_notified, top_entries, submit_lift
+from services.mailer import send_top200_mail
 from services.tokens import TokenError, decode_access
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -93,6 +94,27 @@ def leaderboards():
     return jsonify({"sex": sex, "sort": sort, "entries": entries}), 200
 
 
+def _maybe_send_top200_mail(conn, claims, entry, meta):
+    """Congratulate a lifter the first time their entry ranks in the top 200.
+
+    The entry is stamped only after the mail goes out, so a delivery failure
+    retries on the next submit; once stamped it is never sent again. Verification
+    itself is manual for now — the mail asks for video + bodyweight proof.
+    """
+    if entry["rank"] > TOP_N or meta["notified_at"] is not None:
+        return
+    email = claims.get("email")
+    if not email:
+        log.warning("top-200 entry id=%s has no email claim; mail skipped", meta["id"])
+        return
+    try:
+        send_top200_mail(email, claims["username"], entry["rank"], entry["total_kg"])
+        mark_notified(conn, meta["id"])
+        log.info("top-200 mail sent user_id=%s rank=%s", claims["sub"], entry["rank"])
+    except Exception as exc:
+        log.warning("top-200 mail failed (will retry on next submit): %s", exc)
+
+
 @app.route("/api/leaderboards/submit", methods=["POST"])
 def submit():
     try:
@@ -114,7 +136,7 @@ def submit():
 
     try:
         conn = _db()
-        entry = submit_lift(
+        entry, meta = submit_lift(
             conn,
             sex=sex,
             user_id=int(claims["sub"]),
@@ -127,6 +149,8 @@ def submit():
     except Exception as exc:
         log.error("db error in /submit: %s", exc)
         return jsonify({"error": "database error"}), 500
+
+    _maybe_send_top200_mail(conn, claims, entry, meta)
 
     log.info(
         "leaderboard submit user_id=%s sex=%s total=%s rank=%s",

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { RankBadge } from './RankBadge'
 import { TIER_COLORS } from './tiers'
 import { LoginPage } from './LoginPage'
-import { logout, restoreSession } from './auth'
+import { getAccessToken, logout, restoreSession } from './auth'
 
 const EXERCISES = ['squat', 'bench', 'deadlift', 'total']
 
@@ -186,9 +186,14 @@ export function LiftForm({ username, onResult }) {
     setError(null)
     setLoading(true)
     try {
+      // Signed-in lifts carry the token so the backend can feed the leaderboard
+      const token = getAccessToken()
       const res = await fetch('/api/rank', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           username,
           exercise:      form.exercise,
