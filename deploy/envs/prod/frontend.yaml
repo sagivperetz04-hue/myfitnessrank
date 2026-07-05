@@ -2,6 +2,6 @@
 # answers at http://localhost:8080. The pinned tag is the promotion gate: it is
 # bumped on release, not on every master merge.
 image:
-  tag: "0.1.1"
+  tag: "0.2.0"
 ingress:
   host: ""
