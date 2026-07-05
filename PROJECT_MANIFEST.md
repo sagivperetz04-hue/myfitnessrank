@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-05, branch `feature/RND-009-top200-mail`.
+> Last updated: 2026-07-05, branch `docs/gitops-in-repo`.
 
 ---
 
@@ -374,18 +374,19 @@ live/
 
 ## 16. Deploy pipelines (GitHub Actions)
 
-- [ ] `deploy-staging.yml` — on merge to master: build → push all images to ECR (immutable `github.sha` tags) → **bump image tags in the gitops repo via PR/commit** (GitOps: CI never runs `helm upgrade` or `kubectl apply` against the cluster).
-- [ ] `deploy-production.yml` — on `v*.*.*` tag: retag/promote the already-tested staging digest (build once, promote many — no rebuild for prod), bump the prod env in the gitops repo.
+- [ ] `deploy-staging.yml` — on merge to master: build → push all images to ECR (immutable `github.sha` tags) → **bump image tags in `deploy/envs/` via PR/commit** (GitOps: CI never runs `helm upgrade` or `kubectl apply` against the cluster).
+- [ ] `deploy-production.yml` — on `v*.*.*` tag: retag/promote the already-tested staging digest (build once, promote many — no rebuild for prod), bump the prod overlay in `deploy/envs/`.
 - [ ] OIDC role assumption in both (no static AWS keys anywhere).
 - [ ] All new actions SHA-pinned via the live-API resolution process in CLAUDE.md.
 - [ ] Concurrency group per environment so overlapping deploys queue instead of racing.
 
-## 17. GitOps repo (`myfitnessrank-gitops`)
+## 17. GitOps state (this repo — no separate gitops repo)
 
-- [ ] Per-environment desired state: `envs/staging/`, `envs/production/` — values overlays per service (image tag, replicas, resources, ingress hosts).
-- [ ] ArgoCD **ApplicationSet** generating one Application per (service × environment) instead of the hand-written app list in this repo.
-- [ ] Move `deploy/argocd/` contents there once EKS exists; this repo keeps only app code, charts, and CI.
-- [ ] Root/bootstrap app per cluster; ArgoCD itself installed by Terraform/Helm and pointed at the gitops repo.
+**Decision (2026-07-05):** GitOps desired state stays in this repo (`deploy/argocd/` + `deploy/envs/`) instead of a separate `myfitnessrank-gitops` repo. One repo keeps chart, overlay, and app changes atomic in a single PR; the mono-repo is small enough that the separation buys nothing yet.
+
+- [x] Per-environment desired state: `deploy/envs/<env>/<service>.yaml` — values overlays per service (image tag, replicas, resources, ingress hosts).
+- [x] ArgoCD **ApplicationSet** generating one Application per (service × environment) (`deploy/argocd/apps/services.yaml`).
+- [ ] Root/bootstrap app per cluster; ArgoCD itself installed by Terraform/Helm on EKS and pointed at this repo's `deploy/argocd/apps/`.
 - [ ] Secrets strategy for EKS (choose one, document): External Secrets Operator + AWS Secrets Manager (preferred — keeps the "no secrets in git" rule) vs. Sealed Secrets.
 
 ## 18. Production data layer

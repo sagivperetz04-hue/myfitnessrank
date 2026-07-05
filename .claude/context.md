@@ -135,6 +135,7 @@ myfitnessrank-app/         ← this repo
   CLAUDE.md  .claude/      # working rules, standards, this file
 ```
 
-Separate repositories (planned):
-- `myfitnessrank-gitops` — ArgoCD desired state per environment
+Separate repositories:
 - `myfitnessrank-infra` — Terraform modules + Terragrunt live tree
+
+ArgoCD desired state per environment lives in this repo (`deploy/argocd/`, `deploy/envs/`) — no separate gitops repo.
