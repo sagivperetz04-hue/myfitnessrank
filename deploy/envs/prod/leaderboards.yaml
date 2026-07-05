@@ -1,4 +1,4 @@
 # prod overlay for helm/leaderboards — chart defaults apply. The pinned tag is
 # the promotion gate: it is bumped on release, not on every master merge.
 image:
-  tag: "0.1.0"
+  tag: "0.1.1"
