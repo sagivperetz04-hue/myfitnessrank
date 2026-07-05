@@ -2,3 +2,12 @@
 # the promotion gate: it is bumped on release, not on every master merge.
 image:
   tag: "0.1.1"
+# Real top-200 mail in prod only (staging/dev keep the log-only default).
+# Credentials secret created out-of-band; Gmail rewrites From to the
+# authenticated account, so it must match the secret's user.
+smtp:
+  host: smtp.gmail.com
+  port: 587
+  starttls: true
+  from: sagivaws@gmail.com
+  existingSecret: leaderboards-smtp-credentials
