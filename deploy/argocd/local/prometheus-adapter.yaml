@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus-adapter
+  namespace: argocd
+  annotations:
+    # After the stack (wave 1): the adapter serves the custom.metrics.k8s.io
+    # API from Prometheus queries, so Prometheus should exist first.
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: myfitnessrank
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: prometheus-adapter
+    targetRevision: 5.3.0
+    helm:
+      values: |
+        prometheus:
+          url: http://kube-prometheus-stack-prometheus.monitoring.svc
+          port: 9090
+        resources:
+          requests:
+            cpu: 25m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+        rules:
+          # No default rule set — expose only the metric the backend HPA scales
+          # on, keeping the custom-metrics API surface reviewable.
+          default: false
+          custom:
+            - seriesQuery: 'flask_http_request_total{namespace!="",pod!=""}'
+              resources:
+                overrides:
+                  namespace: { resource: namespace }
+                  pod: { resource: pod }
+              name:
+                matches: "^flask_http_request_total$"
+                as: "flask_http_requests_per_second"
+              metricsQuery: sum(rate(<<.Series>>{<<.LabelMatchers>>}[2m])) by (<<.GroupBy>>)
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        maxDuration: 5m
+        factor: 2

@@ -222,3 +222,32 @@ jobs:
             docker tag "myfitnessrank/${service}:${IMAGE_TAG}" "${REGISTRY}/myfitnessrank/${service}:${IMAGE_TAG}"
             docker push "${REGISTRY}/myfitnessrank/${service}:${IMAGE_TAG}"
           done
+
+      # Staging (EKS) inherits the chart-default image tags, so every master
+      # merge must also publish the images under those tags. auth/backend tags
+      # live nested under their aliases in the core umbrella values.
+      - name: Push chart-tag images for staging
+        if: steps.aws-check.outputs.ready == 'true'
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          chart_tag() {  # chart_tag <values-file> [alias]
+            if [[ -n "${2:-}" ]]; then
+              awk -v a="^$2:" '$0 ~ a{s=1; next} s && /^[a-z]/{s=0} s && /image:/{f=1} s && f && /tag:/{gsub(/[" ]/,"",$2); print $2; exit}' "$1"
+            else
+              awk '/^image:/{f=1} f && /tag:/{gsub(/[" ]/,"",$2); print $2; exit}' "$1"
+            fi
+          }
+          declare -A tags=(
+            [backend]=$(chart_tag helm/core/values.yaml backend)
+            [auth]=$(chart_tag helm/core/values.yaml auth)
+            [leaderboards]=$(chart_tag helm/leaderboards/values.yaml)
+            [frontend]=$(chart_tag helm/frontend/values.yaml)
+          )
+          for service in "${!tags[@]}"; do
+            tag="${tags[$service]}"
+            [[ -n "$tag" ]] || { echo "no chart tag for ${service}"; exit 1; }
+            docker tag "myfitnessrank/${service}:${IMAGE_TAG}" "${REGISTRY}/myfitnessrank/${service}:${tag}"
+            docker push "${REGISTRY}/myfitnessrank/${service}:${tag}"
+          done

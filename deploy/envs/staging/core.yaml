@@ -1,5 +1,9 @@
-# staging overlay for helm/core — single replicas, halved resources.
+# staging overlay for helm/core — EKS: ECR images (tags inherit the chart
+# defaults, which CI pushes on every master merge), single replicas, halved
+# resources.
 auth:
+  image:
+    repository: 809379394639.dkr.ecr.us-east-1.amazonaws.com/myfitnessrank/auth
   replicaCount: 1
   resources:
     requests:
@@ -10,6 +14,8 @@ auth:
       memory: 192Mi
 
 backend:
+  image:
+    repository: 809379394639.dkr.ecr.us-east-1.amazonaws.com/myfitnessrank/backend
   replicaCount: 1
   resources:
     requests:

@@ -1,0 +1,64 @@
+# One Application per (environment x service), replacing the previous
+# hand-written per-service Applications. Environments are namespaces on the
+# single cluster: myfitnessrank-{dev,staging,prod}.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: myfitnessrank-services
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          # This cluster (local kind) runs dev only, tracking the dev branch;
+          # staging and prod live on EKS (see ../aws/services.yaml).
+          - list:
+              elements:
+                - env: dev
+                  revision: dev
+          - list:
+              elements:
+                # core is the umbrella chart carrying auth + backend as aliases
+                # of the generic web-service chart (helm/core + helm/web-service)
+                - service: core
+                - service: leaderboards
+                - service: frontend
+                - service: postgres
+                - service: postgres-auth
+                - service: postgres-leaderboards
+  template:
+    metadata:
+      name: '{{.service}}-{{.env}}'
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: myfitnessrank
+      # Multi-source: the chart itself, plus the same repo again under the
+      # `values` ref so valueFiles can point outside the chart directory.
+      sources:
+        - repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
+          targetRevision: '{{.revision}}'
+          path: helm/{{.service}}
+          helm:
+            # ArgoCD defaults the Helm release name to the Application name
+            # ({{.service}}-{{.env}}), which the charts' fullname helpers turn
+            # into suffixed resource names — breaking the fixed DNS names the
+            # services use to reach each other (postgres, auth, ...). Pin the
+            # release to the bare service name; namespaces already isolate envs.
+            releaseName: '{{.service}}'
+            valueFiles:
+              - $values/deploy/envs/{{.env}}/{{.service}}.yaml
+        - repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
+          targetRevision: '{{.revision}}'
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'myfitnessrank-{{.env}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

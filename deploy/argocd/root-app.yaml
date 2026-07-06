@@ -1,5 +1,6 @@
 # App-of-apps: the only Application applied by hand (kubectl apply -f).
-# It syncs deploy/argocd/apps/, which defines one Application per service.
+# It syncs deploy/argocd/local/ (the kind cluster: dev env only). The EKS
+# cluster gets its own root app (deploy/argocd/aws/) planted by Terraform.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -10,7 +11,7 @@ spec:
   source:
     repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
     targetRevision: master
-    path: deploy/argocd/apps
+    path: deploy/argocd/local
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

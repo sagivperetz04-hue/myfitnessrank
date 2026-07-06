@@ -1,9 +1,12 @@
-# prod overlay for helm/core — chart defaults apply. The pinned tags are the
-# promotion gate: bumped on release, not on every master merge.
+# prod overlay for helm/core — EKS: ECR images with pinned tags. The pins are
+# the promotion gate: the release workflow bumps them when a vX.Y.Z tag is cut,
+# never on ordinary master merges.
 auth:
   image:
+    repository: 809379394639.dkr.ecr.us-east-1.amazonaws.com/myfitnessrank/auth
     tag: "0.1.0"
 
 backend:
   image:
+    repository: 809379394639.dkr.ecr.us-east-1.amazonaws.com/myfitnessrank/backend
     tag: "0.1.2"

@@ -17,8 +17,6 @@ spec:
   # (a sync with any forbidden resource fails as a whole).
   destinations:
     - server: https://kubernetes.default.svc
-      namespace: myfitnessrank-dev
-    - server: https://kubernetes.default.svc
       namespace: myfitnessrank-staging
     - server: https://kubernetes.default.svc
       namespace: myfitnessrank-prod

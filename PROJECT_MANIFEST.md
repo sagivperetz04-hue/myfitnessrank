@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-06, branch `feature/RND-012-custom-metrics`.
+> Last updated: 2026-07-06, branch `feature/RND-013-full-gitops`.
 
 ---
 
@@ -211,7 +211,13 @@ Prod's leaderboards overlay also carries the only real SMTP config (Gmail relay,
 
 ## 8. GitOps — ArgoCD (`deploy/argocd/`)
 
-App-of-apps pattern; `root-app.yaml` is the **only** manifest ever applied by hand.
+App-of-apps pattern, one app-of-apps **per cluster** (RND-013):
+`deploy/argocd/local/` (kind — dev only, root applied by `./start`) and
+`deploy/argocd/aws/` (EKS — staging + prod, root planted by the infra repo's
+`argocd` Terraform unit). Each copy scopes its AppProject destinations and the
+monitoring chart's `appNamespaces` to its own environments. EKS overlays pull
+images from ECR (`809379394639.dkr.ecr.us-east-1.amazonaws.com/myfitnessrank/*`);
+`root-app.yaml` is the **only** manifest ever applied by hand (kind).
 
 | File | Purpose |
 |---|---|

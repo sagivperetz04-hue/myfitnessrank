@@ -1,7 +1,8 @@
-# prod overlay for helm/frontend — empty host = catch-all rule, so prod is what
-# answers at http://localhost:8080. The pinned tag is the promotion gate: it is
-# bumped on release, not on every master merge.
+# prod overlay for helm/frontend — EKS: ECR image, empty host = catch-all rule,
+# so the apex and www answer with prod regardless of domain. The pinned tag is
+# the promotion gate: bumped by the release workflow on vX.Y.Z tags only.
 image:
+  repository: 809379394639.dkr.ecr.us-east-1.amazonaws.com/myfitnessrank/frontend
   tag: "0.2.1"
 ingress:
   host: ""

@@ -1,0 +1,76 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    # Installs the Prometheus Operator + CRDs that the `monitoring` app (wave 2)
+    # depends on for its ServiceMonitor.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: myfitnessrank
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 87.3.0
+    helm:
+      values: |
+        # On kind these control-plane components bind to 127.0.0.1, so their
+        # scrape targets can never be reached — disable them rather than show
+        # permanently-down targets. CoreDNS is pod-networked and stays on.
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeEtcd:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        prometheus:
+          prometheusSpec:
+            # Discover ServiceMonitors/PodMonitors/Rules cluster-wide rather than
+            # only those carrying this release's label.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            retention: 2d
+            resources:
+              requests:
+                cpu: 100m
+                memory: 400Mi
+        grafana:
+          # Admin credentials come from a pre-created secret, never from values.
+          admin:
+            existingSecret: grafana-admin
+            userKey: admin-user
+            passwordKey: admin-password
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The bundled CRDs exceed the client-side apply annotation size limit.
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        maxDuration: 5m
+        factor: 2
+  ignoreDifferences:
+    # The chart's admission webhook patches its own caBundle in-cluster after
+    # sync; without this ArgoCD reports a permanent OutOfSync and fights it.
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: kube-prometheus-stack-admission
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      name: kube-prometheus-stack-admission
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
