@@ -345,10 +345,10 @@ function HistoryView({ username }) {
                 <td>{row.reps}</td>
                 <td>{parseFloat(row.one_rm_kg).toFixed(1)} kg</td>
                 <td style={{ color: TIER_COLORS[row.competition.tier] }}>
-                  {row.competition.tier} (top {row.competition.percentile}%)
+                  {row.competition.tier} (top {100 - row.competition.percentile}%)
                 </td>
                 <td style={{ color: TIER_COLORS[row.world_avg.tier] }}>
-                  {row.world_avg.tier} (top {row.world_avg.percentile}%)
+                  {row.world_avg.tier} (top {100 - row.world_avg.percentile}%)
                 </td>
               </tr>
             ))}

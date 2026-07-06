@@ -181,7 +181,7 @@ export function RankBadge({ tier, percentile, label, id }) {
       </div>
       <div className={`rb-info ${revealed ? 'rb-revealed' : ''}`}>
         <span className="rb-tier" style={{ color }}>{tier?.toUpperCase()}</span>
-        <span className="rb-pct">top {percentile}%</span>
+        <span className="rb-pct">top {100 - percentile}%</span>
       </div>
     </div>
   )
