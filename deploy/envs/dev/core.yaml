@@ -1,0 +1,26 @@
+# dev overlay for helm/core — single replicas, halved resources.
+auth:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      cpu: 250m
+      memory: 192Mi
+
+backend:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      cpu: 250m
+      memory: 192Mi
+  # dev is the proving ground for custom-metric autoscaling; staging/prod keep
+  # fixed replicas until the HPA has been observed under load here.
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3

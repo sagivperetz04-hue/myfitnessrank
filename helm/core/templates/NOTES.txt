@@ -1,0 +1,11 @@
+MyFitnessRank core services deployed (auth + backend via the web-service chart).
+
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+Check rollouts:
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/auth
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/backend
+
+Per-service config lives under the `auth:` and `backend:` keys in this chart's
+values; shared defaults come from helm/web-service/values.yaml.

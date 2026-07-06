@@ -2,5 +2,5 @@ apiVersion: v2
 name: leaderboards
 description: MyFitnessRank leaderboards service — top-200 boards seeded from OpenPowerlifting
 type: application
-version: 0.1.2
-appVersion: "0.1.2"
+version: 0.1.3
+appVersion: "0.1.3"

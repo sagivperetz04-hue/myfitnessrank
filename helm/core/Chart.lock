@@ -1,0 +1,9 @@
+dependencies:
+- name: web-service
+  repository: file://../web-service
+  version: 0.1.0
+- name: web-service
+  repository: file://../web-service
+  version: 0.1.0
+digest: sha256:295db0a7fe899101bff4773a0fe8447fc7f074816354aa04206c12afee076332
+generated: "2026-07-06T15:45:33.447411907+03:00"

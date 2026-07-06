@@ -1,0 +1,84 @@
+# Generic defaults shared by every instance. The core umbrella chart supplies
+# the per-service identity (component, image, db, ingress, extraEnv) under each
+# dependency alias — this chart is not installed on its own.
+component: web-service
+
+replicaCount: 2
+
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# For ECR: [{ name: ecr-registry-secret }]
+imagePullSecrets: []
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 5000
+
+# Disabled by default: the frontend nginx proxies /api/ paths to the services,
+# so none of them has a reason to be reachable from outside the cluster.
+ingress:
+  enabled: false
+  className: nginx
+  host: ""
+  path: /
+  pathType: Prefix
+
+db:
+  # Service name of the postgres release in the same namespace
+  host: postgres
+  port: 5432
+  # Secret with keys: username, password, database — created out-of-band,
+  # never committed to git
+  existingSecret: ""
+
+# Secret holding the HS256 JWT signing key (key: signing-key) — shared across
+# the services that issue or verify access tokens.
+jwt:
+  existingSecret: jwt-signing-key
+  secretKey: signing-key
+
+# Extra plain-value env vars for service-specific config
+# (e.g. LEADERBOARDS_URL for backend, COOKIE_SECURE for auth).
+extraEnv: []
+
+# Scale on the per-pod request rate exposed through prometheus-adapter
+# (deploy/argocd/apps/prometheus-adapter.yaml). replicaCount is ignored while
+# enabled — the Deployment omits `replicas` so the HPA owns scale.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 4
+  metricName: flask_http_requests_per_second
+  targetRequestsPerSecond: "5"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+probes:
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 20

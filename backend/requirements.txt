@@ -4,3 +4,4 @@ psycopg2-binary==2.9.9
 PyJWT==2.9.0
 requests==2.32.3
 prometheus-flask-exporter==0.23.2
+prometheus-client==0.25.0

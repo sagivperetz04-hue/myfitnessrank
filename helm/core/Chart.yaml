@@ -1,0 +1,15 @@
+apiVersion: v2
+name: core
+description: Umbrella chart for the MyFitnessRank core web services — auth and backend as aliases of the generic web-service chart
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+dependencies:
+  - name: web-service
+    version: 0.1.0
+    repository: file://../web-service
+    alias: auth
+  - name: web-service
+    version: 0.1.0
+    repository: file://../web-service
+    alias: backend

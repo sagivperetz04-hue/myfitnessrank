@@ -20,15 +20,41 @@ app = Flask(__name__)
 
 # Prometheus metrics at /metrics. Under gunicorn (multiple workers) counters are
 # aggregated across workers via a shared dir (PROMETHEUS_MULTIPROC_DIR, set in the
-# image); tests and `python app.py` run single-process without it.
+# image); tests and `python app.py` run single-process without it. The Internal
+# variant serves /metrics from the app port itself (which the ServiceMonitor
+# scrapes) — the non-Internal one registers no route and expects a separate
+# metrics server, leaving /metrics a 404.
 if os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
-    from prometheus_flask_exporter.multiprocess import GunicornPrometheusMetrics
+    from prometheus_flask_exporter.multiprocess import (
+        GunicornInternalPrometheusMetrics,
+    )
 
-    metrics = GunicornPrometheusMetrics(app)
+    metrics = GunicornInternalPrometheusMetrics(app)
 else:
     from prometheus_flask_exporter import PrometheusMetrics
 
     metrics = PrometheusMetrics(app)
+
+from prometheus_client import Counter, Histogram  # noqa: E402
+
+RANKS_TOTAL = Counter(
+    "fitrank_ranks_total",
+    "Lifts ranked, by exercise, sex, and competition tier",
+    ["exercise", "sex", "tier"],
+)
+ONE_RM_KG = Histogram(
+    "fitrank_one_rm_kg",
+    "Estimated 1RM of ranked lifts (kg)",
+    ["exercise"],
+    # Spans a beginner bench (~40) through a world-record deadlift (~505);
+    # "total" submissions land in the top buckets.
+    buckets=(40, 60, 80, 100, 130, 160, 200, 250, 320, 400, 500, 700, 1000),
+)
+LEADERBOARD_SYNC_TOTAL = Counter(
+    "fitrank_leaderboard_sync_total",
+    "Best-lift forwards to the leaderboards service, by outcome",
+    ["outcome"],
+)
 
 _VALID_EXERCISES = ("squat", "bench", "deadlift", "total")
 
@@ -96,10 +122,13 @@ def _sync_leaderboard(conn, user_id, sex, bodyweight_kg, bearer):
             )
             bests = {r["exercise"]: float(r["best"]) for r in cur.fetchall()}
         if set(bests) != {"squat", "bench", "deadlift"}:
+            LEADERBOARD_SYNC_TOTAL.labels(outcome="incomplete").inc()
             return
         submit_bests(bearer, sex, bodyweight_kg, bests)
+        LEADERBOARD_SYNC_TOTAL.labels(outcome="synced").inc()
         log.info("leaderboard sync ok user_id=%s sex=%s", user_id, sex)
     except Exception as exc:
+        LEADERBOARD_SYNC_TOTAL.labels(outcome="failed").inc()
         log.warning("leaderboard sync failed (lift still logged): %s", exc)
 
 
@@ -217,6 +246,9 @@ def rank():
     except Exception as exc:
         log.error("db error in /api/rank: %s", exc)
         return jsonify({"error": "database error"}), 500
+
+    RANKS_TOTAL.labels(exercise=exercise, sex=sex, tier=comp_tier).inc()
+    ONE_RM_KG.labels(exercise=exercise).observe(one_rm_kg)
 
     log.info(
         "ranked user=%s exercise=%s 1rm=%.1f comp=%d(%s) world_avg=%d(%s)",

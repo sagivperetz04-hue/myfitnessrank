@@ -1,11 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "backend.fullname" . }}
+  name: {{ include "web-service.fullname" . }}
   labels:
-    {{- include "backend.labels" . | nindent 4 }}
+    {{- include "web-service.labels" . | nindent 4 }}
 spec:
+  {{- if not .Values.autoscaling.enabled }}
+  # Omitted when the HPA owns scale — a fixed replicas here would make ArgoCD
+  # selfHeal revert every scale-up the autoscaler makes.
   replicas: {{ .Values.replicaCount }}
+  {{- end }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -13,11 +17,11 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      {{- include "backend.selectorLabels" . | nindent 6 }}
+      {{- include "web-service.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "backend.labels" . | nindent 8 }}
+        {{- include "web-service.labels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -26,7 +30,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: backend
+        - name: {{ .Values.component }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
@@ -53,13 +57,15 @@ spec:
                   key: database
             - name: DATABASE_URL
               value: "postgresql://$(DB_USER):$(DB_PASSWORD)@{{ .Values.db.host }}:{{ .Values.db.port }}/$(DB_NAME)"
-            - name: LEADERBOARDS_URL
-              value: {{ .Values.leaderboardsUrl | quote }}
             - name: JWT_SIGNING_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.jwt.existingSecret }}
                   key: {{ .Values.jwt.secretKey }}
+            {{- range .Values.extraEnv }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /health

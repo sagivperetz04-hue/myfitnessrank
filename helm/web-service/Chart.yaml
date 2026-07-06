@@ -1,0 +1,6 @@
+apiVersion: v2
+name: web-service
+description: Generic MyFitnessRank Flask web service — instantiated per service via alias in the core umbrella chart
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

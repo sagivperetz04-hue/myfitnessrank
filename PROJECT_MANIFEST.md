@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-05, branch `feature/RND-011-leaderboard-integrity`.
+> Last updated: 2026-07-06, branch `feature/RND-012-custom-metrics`.
 
 ---
 
@@ -167,9 +167,15 @@ Frontend:
 
 ## 7. Kubernetes / Helm (`helm/`)
 
-One chart per service — `backend`, `auth`, `leaderboards`, `frontend`, plus three Postgres charts (`postgres`, `postgres-auth`, `postgres-leaderboards`).
+Charts: `core` (umbrella: auth + backend), `web-service` (generic, instantiated by core), `leaderboards`, `frontend`, plus three Postgres charts (`postgres`, `postgres-auth`, `postgres-leaderboards`).
 
-### App charts (backend / auth / leaderboards / frontend)
+### Umbrella + generic chart (RND-012 restructure)
+The old `helm/auth` and `helm/backend` charts were ~95% identical, so they were replaced by:
+- **`helm/web-service/`** — one generic chart (deployment/service/ingress/hpa/helpers) parameterized by `component`, `image`, `db`, `ingress.host`, and an `extraEnv` list (auth: `COOKIE_SECURE`; backend: `LEADERBOARDS_URL`). Its `fullname` defaults to the **component name**, not the release name, so cross-service DNS (`auth`, `backend`) survives any release naming. The `version` label comes from `image.tag` (not `appVersion`) so prod's pinned tags label truthfully.
+- **`helm/core/`** — umbrella chart declaring `web-service` twice as `file://../web-service` dependencies with aliases `auth` and `backend`; per-service identity lives under those alias keys in its `values.yaml`. `Chart.lock` is committed; the vendored `charts/*.tgz` is gitignored (ArgoCD rebuilds file:// deps itself; locally run `helm dependency build helm/core` before `helm template`).
+- Rendered-manifest parity with the old charts was verified per env (canonicalized diff); only intended deltas: backend env-var order, and prod `version` labels now matching the pinned tags.
+
+### App charts (web-service instances / leaderboards / frontend)
 Every chart contains `Chart.yaml`, `values.yaml`, `deployment.yaml`, `service.yaml`, `ingress.yaml`, `_helpers.tpl`, `NOTES.txt`. Common hardening baked into all of them:
 
 | Concern | Setting |
@@ -189,6 +195,8 @@ Leaderboards chart additionally has `seed-job.yaml` — a Job that loads the see
 Charts hold the defaults; per-environment differences live in small values overlays under
 `deploy/envs/<env>/<service>.yaml` — replicas/resources (dev/staging run lighter), the
 frontend ingress host per env, and prod's pinned image tags (the promotion gate).
+auth + backend overlays are one `core.yaml` per env with the settings nested under the
+`auth:`/`backend:` alias keys (dev's also enables the backend HPA).
 Current prod pins: auth 0.1.0, backend 0.1.2, leaderboards 0.1.1, frontend 0.2.1
 (RND-008 leaderboard sync + RND-009 top-200 mail promoted 2026-07-05).
 Prod's leaderboards overlay also carries the only real SMTP config (Gmail relay,
@@ -209,7 +217,8 @@ App-of-apps pattern; `root-app.yaml` is the **only** manifest ever applied by ha
 |---|---|
 | `root-app.yaml` | Root Application → syncs `deploy/argocd/apps/` from `master` |
 | `apps/appproject.yaml` | `myfitnessrank` AppProject — scopes what the child apps may deploy (least privilege vs. `default`) |
-| `apps/services.yaml` | ApplicationSet: matrix generator (3 envs × 7 services) → 21 Applications named `<service>-<env>`, each multi-source (chart + `$values` ref to `deploy/envs/<env>/<service>.yaml`), destination `myfitnessrank-<env>`; dev apps track the `dev` branch, staging/prod track `master`. `helm.releaseName` is pinned to the bare service name — without it ArgoCD uses the Application name (`<service>-<env>`) as the release name, suffixing every K8s resource and breaking cross-service DNS (`postgres`, `auth`, …) |
+| `apps/services.yaml` | ApplicationSet: matrix generator (3 envs × 6 services, `core` covering auth+backend) → 18 Applications named `<service>-<env>`, each multi-source (chart + `$values` ref to `deploy/envs/<env>/<service>.yaml`), destination `myfitnessrank-<env>`; dev apps track the `dev` branch, staging/prod track `master`. `helm.releaseName` is pinned to the bare service name — without it ArgoCD uses the Application name (`<service>-<env>`) as the release name, suffixing every K8s resource and breaking cross-service DNS (`postgres`, …); auth/backend names are additionally safe because web-service's fullname defaults to the component name |
+| `apps/prometheus-adapter.yaml` | prometheus-adapter chart (custom.metrics.k8s.io for the backend HPA, see §10) |
 | `apps/kube-prometheus-stack.yaml` | Upstream chart from the prometheus-community Helm repo (see §10) |
 | `apps/monitoring.yaml` | Our `helm/monitoring` chart (ServiceMonitor + dashboard) |
 
@@ -246,21 +255,31 @@ Local stand-in for EKS so the whole GitOps loop runs on one machine.
 
 ---
 
-## 10. Monitoring (`helm/monitoring/` + ArgoCD apps) — RND-005, current branch
+## 10. Monitoring (`helm/monitoring/` + ArgoCD apps) — RND-005, extended by RND-012
 
 ### Stack
 - **kube-prometheus-stack 87.3.0** (Prometheus Operator + Prometheus + Grafana + Alertmanager + node-exporter + kube-state-metrics) installed via ArgoCD from the upstream chart repo into the `monitoring` namespace.
 - Values hardening: 2d retention + resource requests (kind-friendly), Grafana admin from the pre-created `grafana-admin` Secret (never in values), `*SelectorNilUsesHelmValues: false` so it discovers ServiceMonitors cluster-wide.
 
-### Our chart (`helm/monitoring/`)
+### Our chart (`helm/monitoring/`, version 0.2.0)
 - `servicemonitor.yaml` — one ServiceMonitor selecting `app: myfitnessrank` Services across all three env namespaces (`appNamespaces` in values) on the `http` port at `/metrics`, 30s interval → 9 targets (3 services × 3 envs). Frontend is excluded via `component NotIn (frontend)` (nginx 404s on /metrics → would be a permanently-down target); Postgres is naturally excluded (no `http`-named port).
-- `dashboard-configmap.yaml` + `dashboards/myfitnessrank.json` — Grafana dashboard auto-imported by the sidecar via the `grafana_dashboard` label; a `namespace` template variable filters panels per environment, legends read `namespace/service`.
+- `dashboard-configmap.yaml` + `dashboards/myfitnessrank.json` — Grafana dashboard auto-imported by the sidecar via the `grafana_dashboard` label; a `namespace` template variable filters panels per environment, legends read `namespace/service`. RND-012 added six custom-metric panels: ranks by exercise, tier distribution (24h pie), p95 estimated 1RM, signup/login outcomes, leaderboard size, leaderboard-sync + top-200-mail outcomes.
+- `prometheusrule.yaml` (RND-012) — alert rules discovered by the operator (`ruleSelectorNilUsesHelmValues: false`): `ServiceDown` (`up == 0` in app namespaces, 5m, critical), `HighErrorRate` (5xx ratio > 5% for 10m, warning), `HighLatency` (p95 > 0.5s for 10m, warning). Thresholds/durations in `values.yaml` under `alerts:`.
 - Control-plane scrape components that bind to 127.0.0.1 on kind (controller-manager, scheduler, etcd, kube-proxy) are disabled in the kube-prometheus-stack values — unreachable targets would show permanently down. CoreDNS stays enabled.
 
 ### App instrumentation
 - All three Flask services expose `/metrics` via `prometheus-flask-exporter` with **gunicorn multiprocess mode** (per-worker counters aggregated through `PROMETHEUS_MULTIPROC_DIR`) — without this, scrapes would return only one random worker's numbers.
+- **RND-012 fix:** the services previously used `GunicornPrometheusMetrics`, which registers **no** `/metrics` route (it expects a separate metrics server started from a gunicorn `when_ready` hook that was never configured) — under gunicorn, in-cluster `/metrics` was a 404 and every ServiceMonitor target was down. Switched to `GunicornInternalPrometheusMetrics`, which serves `/metrics` on the app port itself. Caught by a gunicorn-mode smoke test; explains why the §13 "verify 9 targets up" follow-up never passed.
+- **Custom business metrics (RND-012)**, all `fitrank_*`-prefixed, defined next to the exporter init in each service's `app.py` (`prometheus-client` now pinned directly in each `requirements.txt`):
+  - backend: `fitrank_ranks_total{exercise,sex,tier}` counter, `fitrank_one_rm_kg{exercise}` histogram (buckets 40–1000 kg), `fitrank_leaderboard_sync_total{outcome=synced|incomplete|failed}` counter.
+  - auth: `fitrank_signups_total{outcome=created|rejected|conflict}`, `fitrank_logins_total{outcome=success|rejected}` counters.
+  - leaderboards: `fitrank_board_submissions_total{sex}` counter, `fitrank_board_size{sex}` gauge (DB count, `multiprocess_mode="livemostrecent"` so workers don't sum a global truth), `fitrank_top200_mails_total{outcome=sent|failed}` counter.
 
-Status: merged to master (PR #4, 2026-07-02). First live sync exposed an AppProject gap — the stack's `kube-system` scrape Services were forbidden, failing the whole sync — fixed alongside the environments work (RND-006).
+### HPA on a custom metric (RND-012)
+- `deploy/argocd/apps/prometheus-adapter.yaml` — prometheus-adapter 5.3.0 (wave 2, `monitoring` ns) serves `custom.metrics.k8s.io` from Prometheus; `rules.default: false`, single custom rule exposing `flask_http_request_total` as per-pod `flask_http_requests_per_second` (2m rate).
+- `helm/web-service/templates/hpa.yaml` — autoscaling/v2 HPA on that Pods metric, gated by `autoscaling.enabled` (default **off**; target 5 req/s per pod). When enabled the Deployment omits `replicas` so ArgoCD selfHeal doesn't fight the autoscaler. Enabled for the **backend in dev only** (`deploy/envs/dev/core.yaml`, min 1 / max 3); staging/prod keep fixed replicas.
+
+Status: RND-005 merged to master (PR #4, 2026-07-02); first live sync exposed an AppProject gap — the stack's `kube-system` scrape Services were forbidden, failing the whole sync — fixed alongside the environments work (RND-006). RND-012 (custom metrics + alerts + HPA + auth/backend umbrella restructure, §7) on `feature/RND-012-custom-metrics`; chart state: monitoring 0.2.0, core 0.1.0 + web-service 0.1.0 (backend image 0.1.4, auth image 0.1.1), leaderboards 0.1.3 (image 0.1.3).
 
 ---
 
@@ -401,9 +420,9 @@ live/
 ## 19. Monitoring & alerting (beyond RND-005)
 
 - [ ] Prometheus/Grafana **persistence** on EKS (PVCs) + realistic retention (kind uses 2d).
-- [ ] PrometheusRule alerts: service down (`up == 0`), 5xx rate, p95 latency, pod restart loops, PVC near-full, CPU/memory vs. limits.
-- [ ] Alertmanager receiver (email or Slack webhook via Secret).
-- [ ] Grafana: per-service RED dashboards (Rate, Errors, Duration) building on the existing dashboard JSON.
+- [x] PrometheusRule alerts: service down (`up == 0`), 5xx rate, p95 latency (RND-012, §10). Still open: pod restart loops, PVC near-full, CPU/memory vs. limits.
+- [ ] Alertmanager receiver (email or Slack webhook via Secret) — rules fire but route nowhere useful yet.
+- [x] Grafana: RED + business-metric panels building on the existing dashboard JSON (RND-012, §10).
 - [ ] Ingress/ALB metrics once the AWS Load Balancer Controller is in.
 
 ## 20. Logging (assignment: Elasticsearch + Kibana, or CloudWatch)

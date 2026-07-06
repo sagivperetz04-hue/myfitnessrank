@@ -1,0 +1,37 @@
+# Per-service identity for each web-service alias. Shared defaults (probes,
+# security contexts, resources, service/ingress shape) live in
+# helm/web-service/values.yaml.
+
+auth:
+  component: auth
+  image:
+    repository: myfitnessrank-auth
+    tag: "0.1.1"
+  db:
+    # Dedicated auth postgres release in the same namespace
+    host: postgres-auth
+    existingSecret: auth-db-credentials
+  ingress:
+    host: auth.myfitnessrank.local
+  extraEnv:
+    # Secure cookies are accepted by modern browsers on http://localhost, so
+    # the refresh cookie stays Secure by default. Set "false" only for
+    # non-localhost http.
+    - name: COOKIE_SECURE
+      value: "true"
+
+backend:
+  component: backend
+  image:
+    repository: myfitnessrank-backend
+    tag: "0.1.4"
+  db:
+    host: postgres
+    existingSecret: fitrank-db-credentials
+  ingress:
+    host: api.myfitnessrank.local
+  extraEnv:
+    # URL of the leaderboards service in the same namespace — /api/rank
+    # forwards signed-in users' best lifts there
+    - name: LEADERBOARDS_URL
+      value: http://leaderboards:5000
