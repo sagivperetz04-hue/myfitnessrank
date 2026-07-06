@@ -1,9 +1,8 @@
 # staging overlay for helm/frontend — EKS: ECR image (tag inherits the chart
-# default), host-routed at https://staging.<domain>.
-# REPLACE-ME: swap in the real domain (same one as the infra repo's
-# live/global/dns unit) — the only place the app repo needs it.
+# default), host-routed at https://staging.myfitnessrank.fitness (domain also
+# set in the infra repo's live/global/dns unit).
 image:
   repository: 809379394639.dkr.ecr.us-east-1.amazonaws.com/myfitnessrank/frontend
 replicaCount: 1
 ingress:
-  host: staging.REPLACE-ME.example
+  host: staging.myfitnessrank.fitness
