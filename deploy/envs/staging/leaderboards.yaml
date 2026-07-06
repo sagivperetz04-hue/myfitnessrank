@@ -1,4 +1,7 @@
-# staging overlay for helm/leaderboards — single replica, halved resources.
+# staging overlay for helm/leaderboards — EKS: ECR image (tag inherits the
+# chart default), single replica, halved resources.
+image:
+  repository: 809379394639.dkr.ecr.us-east-1.amazonaws.com/myfitnessrank/leaderboards
 replicaCount: 1
 resources:
   requests:

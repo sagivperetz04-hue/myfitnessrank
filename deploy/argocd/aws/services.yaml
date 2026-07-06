@@ -12,13 +12,11 @@ spec:
   generators:
     - matrix:
         generators:
-          # Promotion model: dev tracks the dev branch (sandbox); staging and
-          # prod both track master — prod's pinned image tags live in its
-          # values overlay and only move on release.
+          # This cluster (EKS) runs staging + prod, both tracking master —
+          # prod's pinned image tags live in its values overlay and only move
+          # on release (semver tag -> CI bumps the pins). Dev is on local kind.
           - list:
               elements:
-                - env: dev
-                  revision: dev
                 - env: staging
                   revision: master
                 - env: prod

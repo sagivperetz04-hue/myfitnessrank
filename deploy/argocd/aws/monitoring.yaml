@@ -13,6 +13,13 @@ spec:
     repoURL: https://github.com/sagivperetz04-hue/myfitnessrank.git
     targetRevision: master
     path: helm/monitoring
+    helm:
+      # Scope scraping/alerts to this cluster's namespaces (staging + prod run here);
+      # the chart default lists all three.
+      values: |
+        appNamespaces:
+          - myfitnessrank-staging
+          - myfitnessrank-prod
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

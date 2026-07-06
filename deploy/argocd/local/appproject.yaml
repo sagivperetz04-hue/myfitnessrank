@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: myfitnessrank
+  namespace: argocd
+  annotations:
+    # Must exist before the Applications that reference it; default app wave is 0.
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: myfitnessrank application services and monitoring stack
+  # Only these repos may be deployed under this project.
+  sourceRepos:
+    - https://github.com/sagivperetz04-hue/myfitnessrank.git
+    - https://prometheus-community.github.io/helm-charts
+  # Only the in-cluster API server, and only these namespaces. kube-system is
+  # needed by kube-prometheus-stack, which places scrape Services there
+  # (a sync with any forbidden resource fails as a whole).
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: myfitnessrank-dev
+    - server: https://kubernetes.default.svc
+      namespace: monitoring
+    - server: https://kubernetes.default.svc
+      namespace: kube-system
+  # kube-prometheus-stack ships cluster-scoped CRDs/ClusterRoles, so cluster
+  # resources are allowed; namespaced resources are unrestricted within the
+  # whitelisted destination namespaces above.
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
