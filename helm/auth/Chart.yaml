@@ -1,6 +1,0 @@
-apiVersion: v2
-name: auth
-description: MyFitnessRank auth service — signup, login, JWT issuance
-type: application
-version: 0.1.0
-appVersion: "0.1.0"

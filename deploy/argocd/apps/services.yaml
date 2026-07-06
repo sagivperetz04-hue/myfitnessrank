@@ -25,8 +25,9 @@ spec:
                   revision: master
           - list:
               elements:
-                - service: backend
-                - service: auth
+                # core is the umbrella chart carrying auth + backend as aliases
+                # of the generic web-service chart (helm/core + helm/web-service)
+                - service: core
                 - service: leaderboards
                 - service: frontend
                 - service: postgres

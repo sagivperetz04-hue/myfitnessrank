@@ -64,14 +64,23 @@ image_in_node() {
 
 # The Helm values are the single source of truth for the image tag, so a chart
 # bump (e.g. backend 0.1.0 -> 0.1.1) can't drift from what ./start builds.
+# With an alias (umbrella charts like helm/core), the tag lives nested under
+# that alias key instead of at the top level.
 chart_image_tag() {
-  awk '/^image:/{f=1} f && /tag:/{gsub(/[" ]/,"",$2); print $2; exit}' "helm/$1/values.yaml"
+  local chart=$1 alias=${2:-}
+  if [ -n "$alias" ]; then
+    awk -v a="^${alias}:" \
+      '$0 ~ a{s=1; next} s && /^[a-z]/{s=0} s && /image:/{f=1} s && f && /tag:/{gsub(/[" ]/,"",$2); print $2; exit}' \
+      "helm/$chart/values.yaml"
+  else
+    awk '/^image:/{f=1} f && /tag:/{gsub(/[" ]/,"",$2); print $2; exit}' "helm/$chart/values.yaml"
+  fi
 }
 
 build_and_load() {
-  local repo=$1 dir=$2 version
-  version=$(chart_image_tag "$dir")
-  [ -n "$version" ] || die "could not read image tag from helm/$dir/values.yaml"
+  local repo=$1 dir=$2 chart=${3:-$2} alias=${4:-} version
+  version=$(chart_image_tag "$chart" "$alias")
+  [ -n "$version" ] || die "could not read image tag from helm/$chart/values.yaml"
   local tag="$repo:$version"
   if [ "${REBUILD:-0}" = 1 ] || ! image_in_node "$tag"; then
     log "Building and loading $tag"
@@ -80,9 +89,9 @@ build_and_load() {
   fi
 }
 
-build_and_load myfitnessrank-backend backend
+build_and_load myfitnessrank-backend backend core backend
 build_and_load myfitnessrank-frontend frontend
-build_and_load myfitnessrank-auth auth
+build_and_load myfitnessrank-auth auth core auth
 build_and_load myfitnessrank-leaderboards leaderboards
 
 # Every environment gets independently generated secrets, so credentials and

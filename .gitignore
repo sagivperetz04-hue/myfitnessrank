@@ -24,3 +24,6 @@ Thumbs.db
 
 # Local rollback snapshots (DB dumps, working-tree patches)
 .rollback/
+
+# Helm vendored subchart archives (rebuilt by `helm dependency build`)
+helm/*/charts/

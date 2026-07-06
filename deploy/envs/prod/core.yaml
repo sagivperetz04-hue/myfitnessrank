@@ -1,0 +1,9 @@
+# prod overlay for helm/core — chart defaults apply. The pinned tags are the
+# promotion gate: bumped on release, not on every master merge.
+auth:
+  image:
+    tag: "0.1.0"
+
+backend:
+  image:
+    tag: "0.1.2"
