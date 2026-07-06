@@ -79,6 +79,14 @@ def top_entries(conn, sex: str, sort: str, limit: int) -> list[dict]:
     return [_row_to_public(i + 1, r) for i, r in enumerate(rows)]
 
 
+def board_size(conn, sex: str) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT COUNT(*) AS n FROM leaderboard_entries WHERE sex = %s", (sex,)
+        )
+        return cur.fetchone()["n"]
+
+
 def submit_lift(
     conn,
     sex: str,

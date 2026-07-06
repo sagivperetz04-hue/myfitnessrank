@@ -1,6 +1,6 @@
 apiVersion: v2
 name: monitoring
-description: ServiceMonitor and Grafana dashboard for the myfitnessrank services
+description: ServiceMonitor, Grafana dashboard, and alert rules for the myfitnessrank services
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "0.1.0"

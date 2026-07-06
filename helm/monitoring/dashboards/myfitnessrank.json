@@ -79,6 +79,115 @@
           "legendFormat": "{{namespace}}/{{service}}"
         }
       ]
+    },
+    {
+      "id": 4,
+      "title": "Ranks computed (last hour) by exercise",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (namespace, exercise) (increase(fitrank_ranks_total{namespace=~\"$namespace\"}[1h]))",
+          "legendFormat": "{{namespace}}/{{exercise}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Tier distribution of ranks (last 24h)",
+      "type": "piechart",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (tier) (increase(fitrank_ranks_total{namespace=~\"$namespace\"}[24h]))",
+          "legendFormat": "{{tier}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "p95 estimated 1RM (kg) by exercise",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "masskg", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "histogram_quantile(0.95, sum by (exercise, le) (rate(fitrank_one_rm_kg_bucket{namespace=~\"$namespace\"}[1h])))",
+          "legendFormat": "{{exercise}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Signups and logins by outcome (last hour)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (namespace, outcome) (increase(fitrank_signups_total{namespace=~\"$namespace\"}[1h]))",
+          "legendFormat": "{{namespace}} signup {{outcome}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (namespace, outcome) (increase(fitrank_logins_total{namespace=~\"$namespace\"}[1h]))",
+          "legendFormat": "{{namespace}} login {{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Leaderboard size",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "max by (namespace, sex) (fitrank_board_size{namespace=~\"$namespace\"})",
+          "legendFormat": "{{namespace}}/{{sex}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Leaderboard sync and top-200 mail outcomes (last hour)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (namespace, outcome) (increase(fitrank_leaderboard_sync_total{namespace=~\"$namespace\"}[1h]))",
+          "legendFormat": "{{namespace}} sync {{outcome}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (namespace, outcome) (increase(fitrank_top200_mails_total{namespace=~\"$namespace\"}[1h]))",
+          "legendFormat": "{{namespace}} mail {{outcome}}"
+        }
+      ]
     }
   ]
 }

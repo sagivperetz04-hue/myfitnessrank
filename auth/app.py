@@ -27,15 +27,33 @@ app = Flask(__name__)
 
 # Prometheus metrics at /metrics. Under gunicorn (multiple workers) counters are
 # aggregated across workers via a shared dir (PROMETHEUS_MULTIPROC_DIR, set in the
-# image); tests and `python app.py` run single-process without it.
+# image); tests and `python app.py` run single-process without it. The Internal
+# variant serves /metrics from the app port itself (which the ServiceMonitor
+# scrapes) — the non-Internal one registers no route and expects a separate
+# metrics server, leaving /metrics a 404.
 if os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
-    from prometheus_flask_exporter.multiprocess import GunicornPrometheusMetrics
+    from prometheus_flask_exporter.multiprocess import (
+        GunicornInternalPrometheusMetrics,
+    )
 
-    metrics = GunicornPrometheusMetrics(app)
+    metrics = GunicornInternalPrometheusMetrics(app)
 else:
     from prometheus_flask_exporter import PrometheusMetrics
 
     metrics = PrometheusMetrics(app)
+
+from prometheus_client import Counter  # noqa: E402
+
+SIGNUPS_TOTAL = Counter(
+    "fitrank_signups_total",
+    "Signup attempts, by outcome",
+    ["outcome"],
+)
+LOGINS_TOTAL = Counter(
+    "fitrank_logins_total",
+    "Login attempts, by outcome",
+    ["outcome"],
+)
 
 _REFRESH_COOKIE = "mfr_refresh"
 # Scope the refresh cookie to the auth endpoints only — it is never sent to the
@@ -134,12 +152,15 @@ def signup():
     password = str(body.get("password", ""))
 
     if not is_valid_email(email):
+        SIGNUPS_TOTAL.labels(outcome="rejected").inc()
         return jsonify({"error": "enter a valid email address"}), 400
     uname_problems = username_problems(username)
     if uname_problems:
+        SIGNUPS_TOTAL.labels(outcome="rejected").inc()
         return jsonify({"error": "username needs " + ", ".join(uname_problems)}), 400
     problems = password_problems(password)
     if problems:
+        SIGNUPS_TOTAL.labels(outcome="rejected").inc()
         return jsonify({"error": "password needs " + ", ".join(problems)}), 400
 
     try:
@@ -157,6 +178,7 @@ def signup():
         conn.commit()
     except psycopg2.errors.UniqueViolation as exc:
         conn.rollback()
+        SIGNUPS_TOTAL.labels(outcome="conflict").inc()
         # Tell the user which field collided instead of a generic conflict. The
         # username gate is the LOWER(username) index; email is its own constraint.
         if "username" in (exc.diag.constraint_name or ""):
@@ -166,6 +188,7 @@ def signup():
         log.error("db error in /signup: %s", exc)
         return jsonify({"error": "database error"}), 500
 
+    SIGNUPS_TOTAL.labels(outcome="created").inc()
     log.info("account created id=%s username=%s", account["id"], account["username"])
     return _session_response(account, 201)
 
@@ -190,8 +213,10 @@ def login():
 
     # Same response for unknown email and wrong password — don't leak which.
     if account is None or not verify_password(account["password_hash"], password):
+        LOGINS_TOTAL.labels(outcome="rejected").inc()
         return jsonify({"error": "invalid email or password"}), 401
 
+    LOGINS_TOTAL.labels(outcome="success").inc()
     log.info("login id=%s username=%s", account["id"], account["username"])
     return _session_response(account, 200)
 

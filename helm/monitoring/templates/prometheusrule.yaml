@@ -1,0 +1,49 @@
+{{- if .Values.alerts.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: myfitnessrank-alerts
+  labels:
+    app: {{ .Values.appLabel }}
+spec:
+  groups:
+    - name: myfitnessrank.availability
+      rules:
+        - alert: ServiceDown
+          # `up` is per scrape target; 0 means the last scrape failed. Scoped to
+          # the app namespaces so control-plane targets never page here.
+          expr: up{namespace=~"{{ join "|" .Values.appNamespaces }}"} == 0
+          for: {{ .Values.alerts.serviceDownFor }}
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{`{{ $labels.namespace }}/{{ $labels.service }} target down`}}"
+            description: "Prometheus has failed to scrape {{`{{ $labels.pod }}`}} for {{ .Values.alerts.serviceDownFor }}."
+    - name: myfitnessrank.requests
+      rules:
+        - alert: HighErrorRate
+          # Ratio, not absolute count, so quiet environments alert on the same
+          # signal as busy ones.
+          expr: |
+            sum by (namespace, service) (rate(flask_http_request_total{namespace=~"{{ join "|" .Values.appNamespaces }}", status=~"5.."}[5m]))
+              /
+            sum by (namespace, service) (rate(flask_http_request_total{namespace=~"{{ join "|" .Values.appNamespaces }}"}[5m]))
+              > {{ divf .Values.alerts.errorRatePercent 100 }}
+          for: {{ .Values.alerts.errorRateFor }}
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{`{{ $labels.namespace }}/{{ $labels.service }} 5xx rate above`}} {{ .Values.alerts.errorRatePercent }}%"
+            description: "{{`{{ $value | humanizePercentage }} of requests are failing.`}}"
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum by (namespace, service, le) (rate(flask_http_request_duration_seconds_bucket{namespace=~"{{ join "|" .Values.appNamespaces }}"}[5m]))
+            ) > {{ .Values.alerts.latencyP95Seconds }}
+          for: {{ .Values.alerts.latencyFor }}
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{`{{ $labels.namespace }}/{{ $labels.service }} p95 latency above`}} {{ .Values.alerts.latencyP95Seconds }}s"
+            description: "{{`p95 request latency is {{ $value | humanizeDuration }}.`}}"
+{{- end }}

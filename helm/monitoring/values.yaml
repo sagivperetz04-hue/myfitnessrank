@@ -21,3 +21,13 @@ scrapeInterval: 30s
 # sidecar (which watches its own namespace for the grafana_dashboard label).
 dashboard:
   enabled: true
+
+# Alert rules picked up by the Prometheus Operator (its ruleSelector discovers
+# PrometheusRules cluster-wide — see the kube-prometheus-stack values).
+alerts:
+  enabled: true
+  serviceDownFor: 5m
+  errorRatePercent: 5
+  errorRateFor: 10m
+  latencyP95Seconds: 0.5
+  latencyFor: 10m

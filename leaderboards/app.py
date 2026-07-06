@@ -8,6 +8,7 @@ from services.board import (
     TOP_N,
     VALID_SEXES,
     WORLD_RECORDS_KG,
+    board_size,
     lift_cap,
     mark_notified,
     top_entries,
@@ -23,15 +24,41 @@ app = Flask(__name__)
 
 # Prometheus metrics at /metrics. Under gunicorn (multiple workers) counters are
 # aggregated across workers via a shared dir (PROMETHEUS_MULTIPROC_DIR, set in the
-# image); tests and `python app.py` run single-process without it.
+# image); tests and `python app.py` run single-process without it. The Internal
+# variant serves /metrics from the app port itself (which the ServiceMonitor
+# scrapes) — the non-Internal one registers no route and expects a separate
+# metrics server, leaving /metrics a 404.
 if os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
-    from prometheus_flask_exporter.multiprocess import GunicornPrometheusMetrics
+    from prometheus_flask_exporter.multiprocess import (
+        GunicornInternalPrometheusMetrics,
+    )
 
-    metrics = GunicornPrometheusMetrics(app)
+    metrics = GunicornInternalPrometheusMetrics(app)
 else:
     from prometheus_flask_exporter import PrometheusMetrics
 
     metrics = PrometheusMetrics(app)
+
+from prometheus_client import Counter, Gauge  # noqa: E402
+
+SUBMISSIONS_TOTAL = Counter(
+    "fitrank_board_submissions_total",
+    "Accepted leaderboard submissions, by sex",
+    ["sex"],
+)
+# Set from a DB count, so every worker reports the same truth — take the value
+# from whichever live worker wrote it last instead of summing across workers.
+BOARD_SIZE = Gauge(
+    "fitrank_board_size",
+    "Rows on the leaderboard, by sex",
+    ["sex"],
+    multiprocess_mode="livemostrecent",
+)
+TOP200_MAILS_TOTAL = Counter(
+    "fitrank_top200_mails_total",
+    "Top-200 congratulation mails, by outcome",
+    ["outcome"],
+)
 
 
 def _db():
@@ -96,6 +123,7 @@ def leaderboards():
     try:
         conn = _db()
         entries = top_entries(conn, sex, sort, limit)
+        BOARD_SIZE.labels(sex=sex).set(board_size(conn, sex))
     except Exception as exc:
         log.error("db error in /leaderboards: %s", exc)
         return jsonify({"error": "database error"}), 500
@@ -118,8 +146,10 @@ def _maybe_send_top200_mail(conn, claims, entry, meta):
     try:
         send_top200_mail(email, claims["username"], entry["rank"], entry["total_kg"])
         mark_notified(conn, meta["id"])
+        TOP200_MAILS_TOTAL.labels(outcome="sent").inc()
         log.info("top-200 mail sent user_id=%s rank=%s", claims["sub"], entry["rank"])
     except Exception as exc:
+        TOP200_MAILS_TOTAL.labels(outcome="failed").inc()
         log.warning("top-200 mail failed (will retry on next submit): %s", exc)
 
 
@@ -165,6 +195,12 @@ def submit():
     except Exception as exc:
         log.error("db error in /submit: %s", exc)
         return jsonify({"error": "database error"}), 500
+
+    SUBMISSIONS_TOTAL.labels(sex=sex).inc()
+    try:
+        BOARD_SIZE.labels(sex=sex).set(board_size(conn, sex))
+    except Exception as exc:
+        log.warning("board size gauge update failed: %s", exc)
 
     _maybe_send_top200_mail(conn, claims, entry, meta)
 
