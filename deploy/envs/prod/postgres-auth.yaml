@@ -1,2 +1,7 @@
-# prod overlay for helm/postgres-auth — chart defaults apply unchanged.
-{}
+# prod overlay for helm/postgres-auth — chart defaults plus 4-hourly pg_dump to S3
+# (bucket lives in the infra repo's live/global/db-backups-bucket, survives
+# teardowns; IAM via pod identity in live/us-east-1/db-backups).
+backup:
+  enabled: true
+  s3Bucket: myfitnessrank-db-backups-809379394639
+  s3Prefix: postgres-auth/prod

@@ -2,5 +2,5 @@ apiVersion: v2
 name: postgres-leaderboards
 description: MyFitnessRank leaderboards PostgreSQL — dedicated store for ranking entries
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "15.18"
