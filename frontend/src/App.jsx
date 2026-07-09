@@ -106,7 +106,19 @@ function BarbellSVG() {
   )
 }
 
-function LiftIntro({ username, onDone }) {
+function LiftIntro({ username, firstVisit: firstVisitProp, onDone }) {
+  // Online mode passes the account's first_login from the auth service; guest
+  // mode has no account, so it falls back to a per-username browser flag.
+  const [firstVisit] = useState(
+    () => firstVisitProp ?? !localStorage.getItem(`mfr_greeted_${username}`),
+  )
+
+  useEffect(() => {
+    if (firstVisitProp === undefined) {
+      localStorage.setItem(`mfr_greeted_${username}`, '1')
+    }
+  }, [firstVisitProp, username])
+
   useEffect(() => {
     const t = setTimeout(onDone, 2700)
     window.addEventListener('keydown', onDone)
@@ -122,7 +134,9 @@ function LiftIntro({ username, onDone }) {
         <BarbellSVG/>
         <div className="intro-shadow"/>
       </div>
-      <p className="intro-welcome">WELCOME BACK</p>
+      <p className="intro-welcome">
+        {firstVisit ? 'WELCOME TO THE BEST GYM APP EVER' : 'WELCOME BACK'}
+      </p>
       <p className="intro-name">{username}</p>
       <p className="intro-skip">click anywhere or press a key to skip</p>
     </div>
@@ -450,7 +464,7 @@ function LeaderboardView() {
 
 // The ranking app shell. `editable` username = guest mode (browser-local
 // identity); a fixed identity = online mode (the signed-in account).
-function RankApp({ identity, editable, onExit, exitLabel }) {
+function RankApp({ identity, editable, firstVisit, onExit, exitLabel }) {
   const [username, setUsername] = useState(identity)
   const [draftUsername, setDraftUsername] = useState(identity)
   const [view, setView] = useState('log')
@@ -468,7 +482,9 @@ function RankApp({ identity, editable, onExit, exitLabel }) {
 
   return (
     <div className="app">
-      {intro && username && <LiftIntro username={username} onDone={() => setIntro(false)}/>}
+      {intro && username && (
+        <LiftIntro username={username} firstVisit={firstVisit} onDone={() => setIntro(false)}/>
+      )}
 
       <header>
         <Wordmark/>
@@ -548,6 +564,8 @@ export default function App() {
   // null = no choice yet (show login page); 'guest' | 'online' otherwise
   const [mode, setMode] = useState(() => localStorage.getItem('mfr_mode'))
   const [account, setAccount] = useState(null)
+  // Only a fresh login/signup can mark first_login — a restored session never does
+  const [firstLogin, setFirstLogin] = useState(false)
   const [checking, setChecking] = useState(() => localStorage.getItem('mfr_mode') === 'online')
 
   // On reload in online mode, trade the HttpOnly refresh cookie for a session.
@@ -566,9 +584,10 @@ export default function App() {
     setMode('guest')
   }
 
-  function onAuthed(user) {
+  function onAuthed(user, isFirstLogin = false) {
     localStorage.setItem('mfr_mode', 'online')
     setAccount(user)
+    setFirstLogin(isFirstLogin)
     setChecking(false)
     setMode('online')
   }
@@ -599,6 +618,7 @@ export default function App() {
       <RankApp
         identity={account.username}
         editable={false}
+        firstVisit={firstLogin}
         onExit={exitOnline}
         exitLabel="Log out"
       />

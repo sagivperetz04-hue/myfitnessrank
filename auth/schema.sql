@@ -3,8 +3,13 @@ CREATE TABLE IF NOT EXISTS accounts (
     email         TEXT UNIQUE NOT NULL CHECK (email <> ''),
     username      TEXT NOT NULL CHECK (username <> ''),
     password_hash TEXT NOT NULL,
-    created_at    TIMESTAMPTZ DEFAULT NOW()
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    last_login_at TIMESTAMPTZ
 );
+
+-- Idempotent upgrade path: initdb scripts only run on a fresh data volume, so
+-- databases created before this column existed pick it up via this ALTER.
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 
 -- Usernames are unique case-insensitively but stored as the user typed them,
 -- so "Sagiv" and "sagiv" can't both exist. This functional index is the gate.
