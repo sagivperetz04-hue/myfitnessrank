@@ -119,8 +119,12 @@ def _public(account: dict) -> dict:
     }
 
 
-def _session_response(account: dict, status: int):
-    body = {"user": _public(account), "access_token": issue_access(account)}
+def _session_response(account: dict, status: int, first_login: bool):
+    body = {
+        "user": _public(account),
+        "access_token": issue_access(account),
+        "first_login": first_login,
+    }
     resp = jsonify(body)
     _set_refresh_cookie(resp, account)
     return resp, status
@@ -190,7 +194,7 @@ def signup():
 
     SIGNUPS_TOTAL.labels(outcome="created").inc()
     log.info("account created id=%s username=%s", account["id"], account["username"])
-    return _session_response(account, 201)
+    return _session_response(account, 201, first_login=True)
 
 
 @app.route("/api/auth/login", methods=["POST"])
@@ -203,7 +207,8 @@ def login():
         conn = _db()
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, email, username, password_hash FROM accounts WHERE email = %s",
+                "SELECT id, email, username, password_hash, last_login_at"
+                " FROM accounts WHERE email = %s",
                 (email,),
             )
             account = cur.fetchone()
@@ -216,9 +221,23 @@ def login():
         LOGINS_TOTAL.labels(outcome="rejected").inc()
         return jsonify({"error": "invalid email or password"}), 401
 
+    first_login = account["last_login_at"] is None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE accounts SET last_login_at = NOW() WHERE id = %s",
+                (account["id"],),
+            )
+        conn.commit()
+    except Exception as exc:
+        # Login must not fail over a bookkeeping column — worst case the user
+        # sees the first-login greeting again next time.
+        log.error("db error updating last_login_at: %s", exc)
+        conn.rollback()
+
     LOGINS_TOTAL.labels(outcome="success").inc()
     log.info("login id=%s username=%s", account["id"], account["username"])
-    return _session_response(account, 200)
+    return _session_response(account, 200, first_login=first_login)
 
 
 @app.route("/api/auth/refresh", methods=["POST"])

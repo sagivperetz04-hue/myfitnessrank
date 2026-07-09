@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-06, branch `feature/RND-013-full-gitops`.
+> Last updated: 2026-07-08, first-visit intro greeting in the frontend.
 
 ---
 
@@ -80,15 +80,15 @@ Online-accounts microservice: signup, login, session management. Same Flask/guni
 | `app.py` | Routes + refresh-cookie handling |
 | `services/security.py` | **Argon2** password hashing (argon2-cffi), email/username/password validation rules |
 | `services/tokens.py` | JWT issue/decode (PyJWT): short-lived access tokens + refresh tokens with TTL |
-| `db.py` / `schema.sql` | Own Postgres (`postgres-auth`), users table with case-insensitive-unique usernames |
+| `db.py` / `schema.sql` | Own Postgres (`postgres-auth`), users table with case-insensitive-unique usernames + `last_login_at` (idempotent ALTER for pre-existing DBs) |
 
 ### Endpoints
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/health/live`, `/health` | Same liveness/readiness split as backend |
 | GET | `/api/auth/username-available` | Live availability check for the signup form |
-| POST | `/api/auth/signup` | Validates email + username + password strength; Argon2-hashes |
-| POST | `/api/auth/login` | Issues JWT access token + sets refresh cookie |
+| POST | `/api/auth/signup` | Validates email + username + password strength; Argon2-hashes; `first_login: true` |
+| POST | `/api/auth/login` | Issues JWT access token + sets refresh cookie; returns `first_login` (from `last_login_at`, stamped on success) |
 | POST | `/api/auth/refresh` | Rotates the access token from the refresh cookie |
 | POST | `/api/auth/logout` | Clears the refresh cookie |
 | GET | `/api/auth/me` | Returns identity from a valid access token |
@@ -136,7 +136,7 @@ React 18 + Vite, served by **unprivileged nginx** which doubles as the API gatew
 ### Application code
 | File | What it does |
 |---|---|
-| `src/App.jsx` | Dashboard: lift input form, rank results, history, leaderboard page; client-side world-record sanity check (UX only — backend is the real gate) |
+| `src/App.jsx` | Dashboard: lift input form, rank results, history, leaderboard page; client-side world-record sanity check (UX only — backend is the real gate); intro overlay shows a first-visit greeting vs. "welcome back" (online: `first_login` from auth; guest: per-username `mfr_greeted_*` localStorage flag) |
 | `src/LoginPage.jsx` + `src/auth.js` | Signup/login UI, access-token handling, silent refresh |
 | `src/RankBadge.jsx` / `.css` + `src/tiers.js` | Tier badge rendering (Copper → Elite) |
 | `src/ErrorBoundary.jsx` | Catches render errors instead of white-screening |

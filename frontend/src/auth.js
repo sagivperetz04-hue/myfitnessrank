@@ -65,7 +65,7 @@ async function postSession(path, body) {
   })
   const data = await readJson(res)
   accessToken = data.access_token
-  return data.user
+  return { user: data.user, firstLogin: data.first_login === true }
 }
 
 export function signup(email, username, password) {

@@ -64,11 +64,11 @@ export function LoginPage({ onGuest, onAuthed, forceOnline = false }) {
     setError(null)
     setLoading(true)
     try {
-      const user =
+      const { user, firstLogin } =
         tab === 'signup'
           ? await signup(form.email, username, form.password)
           : await login(form.email, form.password)
-      onAuthed(user)
+      onAuthed(user, firstLogin)
     } catch (err) {
       setError(err.message)
     } finally {
