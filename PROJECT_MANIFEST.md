@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-08, first-visit intro greeting in the frontend.
+> Last updated: 2026-07-09, DB backups to S3 (RND-015) in the postgres charts + prod overlays.
 
 ---
 
@@ -202,10 +202,11 @@ Current prod pins: auth 0.1.0, backend 0.1.2, leaderboards 0.1.1, frontend 0.2.1
 Prod's leaderboards overlay also carries the only real SMTP config (Gmail relay,
 `leaderboards-smtp-credentials` secret created out-of-band); staging/dev stay log-only.
 
-### Postgres charts (x3, one per service DB)
+### Postgres charts (x3, one per service DB) — 0.2.0
 - StatefulSet + headless Service, `postgres:15.18-alpine` pinned.
 - `configmap-initdb.yaml` mounts `files/initdb/*.sql` → schema (and seed data for the main DB) applied automatically on first boot.
 - Credentials from pre-created Secrets; PVC-backed storage survives pod restarts.
+- `backup-cronjob.yaml` (RND-015, after the 2026-07-08 EKS teardown wiped real prod signups): 4-hourly `pg_dump -Fc` → S3, off by default, enabled per env by the prod overlays (`deploy/envs/prod/postgres*.yaml`, bucket `myfitnessrank-db-backups-809379394639`, prefix `<service>/prod`). initContainer dumps with the server's own image; an `aws-cli` container (pinned `2.35.19`) uploads. Credentials via EKS pod identity bound to the `<service>-backup` ServiceAccount — no keys in-cluster, so the job only works on EKS (infra repo: `live/global/db-backups-bucket` survives stopinfra + `live/us-east-1/db-backups` IAM, upload-only). Restore: `pg_restore -d <db> <file>.dump`.
 
 ---
 

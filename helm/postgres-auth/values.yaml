@@ -46,3 +46,23 @@ probes:
   liveness:
     initialDelaySeconds: 30
     periodSeconds: 20
+
+# pg_dump shipped to S3 on a schedule. Off by default; the prod overlay turns
+# it on. Upload credentials come from EKS pod identity bound to the job's
+# ServiceAccount (infra repo: live/us-east-1/db-backups) — no keys in-cluster,
+# so this only runs on EKS, the only place real user data lives.
+backup:
+  enabled: false
+  schedule: "0 */4 * * *"
+  s3Bucket: ""
+  s3Prefix: postgres-auth
+  awsCli:
+    repository: public.ecr.aws/aws-cli/aws-cli
+    tag: "2.35.19"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi

@@ -1,0 +1,93 @@
+{{- if .Values.backup.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  # The infra repo's pod-identity association binds the S3 upload role to this
+  # exact namespace/name pair — rename both together or uploads lose access
+  name: {{ include "postgres-auth.fullname" . }}-backup
+  labels:
+    {{- include "postgres-auth.labels" . | nindent 4 }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "postgres-auth.fullname" . }}-backup
+  labels:
+    {{- include "postgres-auth.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            {{- include "postgres-auth.labels" . | nindent 12 }}
+        spec:
+          serviceAccountName: {{ include "postgres-auth.fullname" . }}-backup
+          restartPolicy: Never
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          initContainers:
+            # Dump with the server's own image so pg_dump never version-skews
+            - name: dump
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              securityContext:
+                {{- toYaml .Values.securityContext | nindent 16 }}
+              command: ["sh", "-c", "pg_dump -Fc -f /backup/db.dump"]
+              env:
+                - name: PGHOST
+                  value: {{ include "postgres-auth.fullname" . }}
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.existingSecret }}
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.existingSecret }}
+                      key: password
+                - name: PGDATABASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.existingSecret }}
+                      key: database
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          containers:
+            - name: upload
+              image: "{{ .Values.backup.awsCli.repository }}:{{ .Values.backup.awsCli.tag }}"
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                {{- toYaml .Values.securityContext | nindent 16 }}
+              command:
+                - sh
+                - -c
+                - aws s3 cp /backup/db.dump "s3://${S3_BUCKET}/${S3_PREFIX}/$(date -u +%Y-%m-%dT%H-%M-%SZ).dump"
+              env:
+                # aws-cli needs a writable HOME for its cache; the emptyDir is it
+                - name: HOME
+                  value: /backup
+                - name: S3_BUCKET
+                  value: {{ required "backup.s3Bucket is required when backup.enabled" .Values.backup.s3Bucket | quote }}
+                - name: S3_PREFIX
+                  value: {{ .Values.backup.s3Prefix | quote }}
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          volumes:
+            - name: backup
+              emptyDir: {}
+{{- end }}
