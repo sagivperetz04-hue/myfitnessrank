@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-09, DB backups to S3 (RND-015) in the postgres charts + prod overlays.
+> Last updated: 2026-07-09, External Secrets Operator + Secrets Manager (RND-016) for EKS app secrets.
 
 ---
 
@@ -167,7 +167,7 @@ Frontend:
 
 ## 7. Kubernetes / Helm (`helm/`)
 
-Charts: `core` (umbrella: auth + backend), `web-service` (generic, instantiated by core), `leaderboards`, `frontend`, plus three Postgres charts (`postgres`, `postgres-auth`, `postgres-leaderboards`).
+Charts: `core` (umbrella: auth + backend), `web-service` (generic, instantiated by core), `leaderboards`, `frontend`, three Postgres charts (`postgres`, `postgres-auth`, `postgres-leaderboards`), plus `app-secrets` (RND-016, EKS-only: ClusterSecretStore `aws-secrets-manager` + 11 ExternalSecrets materializing the same K8s secrets the app charts consume — db creds ×3, `jwt-signing-key`, `leaderboards-enc-key` per env, SMTP prod-only — from one consolidated Secrets Manager JSON secret per env, `myfitnessrank/<env>/app`, refreshed hourly; ESO itself + read-only pod-identity IAM installed by the infra repo's `external-secrets` unit, values seeded by `live/global/app-secret-values` which survives teardowns — the old in-cluster random secrets in the `app-secrets` TF module are gone).
 
 ### Umbrella + generic chart (RND-012 restructure)
 The old `helm/auth` and `helm/backend` charts were ~95% identical, so they were replaced by:
@@ -225,6 +225,7 @@ images from ECR (`809379394639.dkr.ecr.us-east-1.amazonaws.com/myfitnessrank/*`)
 | `root-app.yaml` | Root Application → syncs `deploy/argocd/apps/` from `master` |
 | `apps/appproject.yaml` | `myfitnessrank` AppProject — scopes what the child apps may deploy (least privilege vs. `default`) |
 | `apps/services.yaml` | ApplicationSet: matrix generator (3 envs × 6 services, `core` covering auth+backend) → 18 Applications named `<service>-<env>`, each multi-source (chart + `$values` ref to `deploy/envs/<env>/<service>.yaml`), destination `myfitnessrank-<env>`; dev apps track the `dev` branch, staging/prod track `master`. `helm.releaseName` is pinned to the bare service name — without it ArgoCD uses the Application name (`<service>-<env>`) as the release name, suffixing every K8s resource and breaking cross-service DNS (`postgres`, …); auth/backend names are additionally safe because web-service's fullname defaults to the component name |
+| `aws/app-secrets.yaml` | (EKS only, wave 0 — before services) `helm/app-secrets` chart: ClusterSecretStore + ExternalSecrets, so app secrets exist before the DB pods start |
 | `apps/prometheus-adapter.yaml` | prometheus-adapter chart (custom.metrics.k8s.io for the backend HPA, see §10) |
 | `apps/kube-prometheus-stack.yaml` | Upstream chart from the prometheus-community Helm repo (see §10) |
 | `apps/monitoring.yaml` | Our `helm/monitoring` chart (ServiceMonitor + dashboard) |
