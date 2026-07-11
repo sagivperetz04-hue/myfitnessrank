@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-09, External Secrets Operator + Secrets Manager (RND-016) for EKS app secrets.
+> Last updated: 2026-07-11, v0.4.0 promoted to prod; release workflow now auto-updates the prod-pins line.
 
 ---
 
@@ -197,10 +197,10 @@ Charts hold the defaults; per-environment differences live in small values overl
 frontend ingress host per env, and prod's pinned image tags (the promotion gate).
 auth + backend overlays are one `core.yaml` per env with the settings nested under the
 `auth:`/`backend:` alias keys (dev's also enables the backend HPA).
-Current prod pins: auth 0.1.0, backend 0.1.2, leaderboards 0.1.1, frontend 0.2.1
-(RND-008 leaderboard sync + RND-009 top-200 mail promoted 2026-07-05).
-Prod's leaderboards overlay also carries the only real SMTP config (Gmail relay,
-`leaderboards-smtp-credentials` secret created out-of-band); staging/dev stay log-only.
+Current prod pins: v0.4.0 (all four services; this line is auto-updated by the release workflow).
+Prod's leaderboards overlay also carries the only real SMTP config (Gmail relay;
+the `leaderboards-smtp-credentials` secret is materialized by ESO from Secrets
+Manager — RND-016); staging/dev stay log-only.
 
 ### Postgres charts (x3, one per service DB) — 0.2.0
 - StatefulSet + headless Service, `postgres:15.18-alpine` pinned.
