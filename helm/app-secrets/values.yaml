@@ -1,0 +1,13 @@
+# The External Secrets Operator itself is installed by the infra repo
+# (live/us-east-1/external-secrets) with a pod-identity role that can read
+# secrets under <secretPrefix>/* — this chart only declares what to sync.
+region: us-east-1
+storeName: aws-secrets-manager
+# How often ESO re-reads Secrets Manager; edits (e.g. real SMTP credentials)
+# reach the cluster within this window without any redeploy.
+refreshInterval: 1h
+# One consolidated JSON secret per env: <secretPrefix>/<env>/app
+secretPrefix: myfitnessrank
+environments:
+  - staging
+  - prod
