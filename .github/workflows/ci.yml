@@ -1,39 +1,73 @@
+# Per-service CI: each service lints, tests, builds and (on master) pushes only
+# when its own code or chart changed. PRs gate master; a master push is the
+# staging deploy; prod releases build everything in release.yml. `CI OK` is the
+# single required status check — it always runs, so path-skipped jobs can never
+# deadlock branch protection.
 name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [master]
   pull_request:
     branches: [master]
 
+# A newer push to the same ref supersedes the running CI for it
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
 
-  # ── 1. Lint ────────────────────────────────────────────────────────────────
-  lint:
-    name: Lint
+  # ── 0. What changed? ───────────────────────────────────────────────────────
+  changes:
+    name: Detect changes
     runs-on: ubuntu-24.04
-
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      auth: ${{ steps.filter.outputs.auth }}
+      leaderboards: ${{ steps.filter.outputs.leaderboards }}
+      frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+      # Helm chart paths are included because chart values carry the image tags
+      # the push step publishes under — a tag bump must rebuild the image.
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706  # v4.0.2
+        id: filter
         with:
-          python-version: "3.11"
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'helm/core/**'
+              - 'helm/web-service/**'
+              - '.github/workflows/ci.yml'
+            auth:
+              - 'auth/**'
+              - 'helm/core/**'
+              - 'helm/web-service/**'
+              - '.github/workflows/ci.yml'
+            leaderboards:
+              - 'leaderboards/**'
+              - 'helm/leaderboards/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - 'helm/frontend/**'
+              - '.github/workflows/ci.yml'
 
-      - name: Install ruff
-        run: pip install ruff==0.6.9
-
-      - name: ruff check
-        run: ruff check backend/ auth/ leaderboards/
-
-      - name: ruff format check
-        run: ruff format --check backend/ auth/ leaderboards/
-
-  # ── 2. Test ────────────────────────────────────────────────────────────────
-  test:
-    name: Test
-    needs: lint
+  # ── Backend ────────────────────────────────────────────────────────────────
+  backend:
+    name: Backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
+
+    permissions:
+      id-token: write   # OIDC for ECR
+      contents: read
 
     services:
       postgres:
@@ -60,17 +94,68 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt pytest
+        run: pip install -r backend/requirements.txt pytest ruff==0.6.9
 
-      - name: Run tests
+      - name: Lint
+        run: |
+          ruff check backend/
+          ruff format --check backend/
+
+      - name: Test
         working-directory: backend
         run: pytest -v
 
-  # ── 2b. Test Auth ──────────────────────────────────────────────────────────
-  test-auth:
-    name: Test Auth
-    needs: lint
+      - name: Build Docker image
+        run: docker build --no-cache --tag "myfitnessrank/backend:${{ github.sha }}" backend/
+
+      - name: Check AWS secrets are configured
+        id: aws-check
+        if: github.event_name == 'push'
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+        run: |
+          if [[ -n "$AWS_ROLE_ARN" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure AWS credentials
+        if: steps.aws-check.outputs.ready == 'true'
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b  # v6.2.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: steps.aws-check.outputs.ready == 'true'
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@fa648b43de3d4d023bcb3f89ed6940096949c419  # v2.1.5
+
+      # Staging (EKS) inherits the chart-default image tag, so a master merge
+      # publishes both the immutable sha tag and the chart tag.
+      - name: Push to ECR
+        if: steps.aws-check.outputs.ready == 'true'
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          chart_tag=$(awk -v a="^backend:" '$0 ~ a{s=1; next} s && /^[a-z]/{s=0} s && /image:/{f=1} s && f && /tag:/{gsub(/[" ]/,"",$2); print $2; exit}' helm/core/values.yaml)
+          [[ -n "$chart_tag" ]] || { echo "no chart tag for backend"; exit 1; }
+          for tag in "${{ github.sha }}" "$chart_tag"; do
+            docker tag "myfitnessrank/backend:${{ github.sha }}" "${REGISTRY}/myfitnessrank/backend:${tag}"
+            docker push "${REGISTRY}/myfitnessrank/backend:${tag}"
+          done
+
+  # ── Auth ───────────────────────────────────────────────────────────────────
+  auth:
+    name: Auth
+    needs: changes
+    if: needs.changes.outputs.auth == 'true'
     runs-on: ubuntu-24.04
+
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
@@ -82,19 +167,68 @@ jobs:
           cache-dependency-path: auth/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r auth/requirements.txt pytest
+        run: pip install -r auth/requirements.txt pytest ruff==0.6.9
 
-      - name: Run tests
+      - name: Lint
+        run: |
+          ruff check auth/
+          ruff format --check auth/
+
+      - name: Test
         working-directory: auth
         env:
           JWT_SIGNING_KEY: test-signing-key-not-for-prod
         run: pytest -v
 
-  # ── 2c. Test Leaderboards ──────────────────────────────────────────────────
-  test-leaderboards:
-    name: Test Leaderboards
-    needs: lint
+      - name: Build Docker image
+        run: docker build --no-cache --tag "myfitnessrank/auth:${{ github.sha }}" auth/
+
+      - name: Check AWS secrets are configured
+        id: aws-check
+        if: github.event_name == 'push'
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+        run: |
+          if [[ -n "$AWS_ROLE_ARN" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure AWS credentials
+        if: steps.aws-check.outputs.ready == 'true'
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b  # v6.2.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: steps.aws-check.outputs.ready == 'true'
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@fa648b43de3d4d023bcb3f89ed6940096949c419  # v2.1.5
+
+      - name: Push to ECR
+        if: steps.aws-check.outputs.ready == 'true'
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          chart_tag=$(awk -v a="^auth:" '$0 ~ a{s=1; next} s && /^[a-z]/{s=0} s && /image:/{f=1} s && f && /tag:/{gsub(/[" ]/,"",$2); print $2; exit}' helm/core/values.yaml)
+          [[ -n "$chart_tag" ]] || { echo "no chart tag for auth"; exit 1; }
+          for tag in "${{ github.sha }}" "$chart_tag"; do
+            docker tag "myfitnessrank/auth:${{ github.sha }}" "${REGISTRY}/myfitnessrank/auth:${tag}"
+            docker push "${REGISTRY}/myfitnessrank/auth:${tag}"
+          done
+
+  # ── Leaderboards ───────────────────────────────────────────────────────────
+  leaderboards:
+    name: Leaderboards
+    needs: changes
+    if: needs.changes.outputs.leaderboards == 'true'
     runs-on: ubuntu-24.04
+
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
@@ -106,16 +240,66 @@ jobs:
           cache-dependency-path: leaderboards/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r leaderboards/requirements.txt pytest
+        run: pip install -r leaderboards/requirements.txt pytest ruff==0.6.9
 
-      - name: Run tests
+      - name: Lint
+        run: |
+          ruff check leaderboards/
+          ruff format --check leaderboards/
+
+      - name: Test
         working-directory: leaderboards
         run: pytest -v
 
-  # ── 3. Frontend ────────────────────────────────────────────────────────────
+      - name: Build Docker image
+        run: docker build --no-cache --tag "myfitnessrank/leaderboards:${{ github.sha }}" leaderboards/
+
+      - name: Check AWS secrets are configured
+        id: aws-check
+        if: github.event_name == 'push'
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+        run: |
+          if [[ -n "$AWS_ROLE_ARN" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure AWS credentials
+        if: steps.aws-check.outputs.ready == 'true'
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b  # v6.2.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: steps.aws-check.outputs.ready == 'true'
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@fa648b43de3d4d023bcb3f89ed6940096949c419  # v2.1.5
+
+      - name: Push to ECR
+        if: steps.aws-check.outputs.ready == 'true'
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          chart_tag=$(awk '/^image:/{f=1} f && /tag:/{gsub(/[" ]/,"",$2); print $2; exit}' helm/leaderboards/values.yaml)
+          [[ -n "$chart_tag" ]] || { echo "no chart tag for leaderboards"; exit 1; }
+          for tag in "${{ github.sha }}" "$chart_tag"; do
+            docker tag "myfitnessrank/leaderboards:${{ github.sha }}" "${REGISTRY}/myfitnessrank/leaderboards:${tag}"
+            docker push "${REGISTRY}/myfitnessrank/leaderboards:${tag}"
+          done
+
+  # ── Frontend ───────────────────────────────────────────────────────────────
   frontend:
-    name: Frontend Lint & Test
+    name: Frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-24.04
+
+    permissions:
+      id-token: write
+      contents: read
 
     defaults:
       run:
@@ -142,53 +326,14 @@ jobs:
       - name: Build
         run: npm run build
 
-  # ── 4. Build & Push ────────────────────────────────────────────────────────
-  build:
-    name: Build & Push
-    needs: [test, test-auth, test-leaderboards, frontend]
-    runs-on: ubuntu-24.04
+      - name: Build Docker image
+        working-directory: .
+        run: docker build --no-cache --tag "myfitnessrank/frontend:${{ github.sha }}" frontend/
 
-    permissions:
-      id-token: write   # required for OIDC token request
-      contents: read
-
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-
-      # Validates Dockerfile on every branch; confirms the image builds correctly
-      - name: Build backend Docker image
-        run: |
-          docker build \
-            --no-cache \
-            --tag myfitnessrank/backend:${{ github.sha }} \
-            backend/
-
-      - name: Build auth Docker image
-        run: |
-          docker build \
-            --no-cache \
-            --tag myfitnessrank/auth:${{ github.sha }} \
-            auth/
-
-      - name: Build leaderboards Docker image
-        run: |
-          docker build \
-            --no-cache \
-            --tag myfitnessrank/leaderboards:${{ github.sha }} \
-            leaderboards/
-
-      - name: Build frontend Docker image
-        run: |
-          docker build \
-            --no-cache \
-            --tag myfitnessrank/frontend:${{ github.sha }} \
-            frontend/
-
-      # Checks whether AWS secrets are configured. Secrets cannot be referenced
-      # in if: expressions directly — expose via step output instead.
       - name: Check AWS secrets are configured
         id: aws-check
-        if: github.ref == 'refs/heads/master'
+        if: github.event_name == 'push'
+        working-directory: .
         env:
           AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
         run: |
@@ -210,44 +355,33 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@fa648b43de3d4d023bcb3f89ed6940096949c419  # v2.1.5
 
-      # One ECR repository per service, named myfitnessrank/<service> — must match
-      # the repositories Terraform creates in the infra repo.
       - name: Push to ECR
         if: steps.aws-check.outputs.ready == 'true'
+        working-directory: .
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
-          for service in backend auth leaderboards frontend; do
-            docker tag "myfitnessrank/${service}:${IMAGE_TAG}" "${REGISTRY}/myfitnessrank/${service}:${IMAGE_TAG}"
-            docker push "${REGISTRY}/myfitnessrank/${service}:${IMAGE_TAG}"
+          chart_tag=$(awk '/^image:/{f=1} f && /tag:/{gsub(/[" ]/,"",$2); print $2; exit}' helm/frontend/values.yaml)
+          [[ -n "$chart_tag" ]] || { echo "no chart tag for frontend"; exit 1; }
+          for tag in "${{ github.sha }}" "$chart_tag"; do
+            docker tag "myfitnessrank/frontend:${{ github.sha }}" "${REGISTRY}/myfitnessrank/frontend:${tag}"
+            docker push "${REGISTRY}/myfitnessrank/frontend:${tag}"
           done
 
-      # Staging (EKS) inherits the chart-default image tags, so every master
-      # merge must also publish the images under those tags. auth/backend tags
-      # live nested under their aliases in the core umbrella values.
-      - name: Push chart-tag images for staging
-        if: steps.aws-check.outputs.ready == 'true'
-        env:
-          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+  # ── Required check ─────────────────────────────────────────────────────────
+  # The one status check branch protection requires. Always runs; passes when
+  # every service job either succeeded or was skipped by the path filter.
+  ci-ok:
+    name: CI OK
+    needs: [changes, backend, auth, leaderboards, frontend]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify no job failed
         run: |
-          chart_tag() {  # chart_tag <values-file> [alias]
-            if [[ -n "${2:-}" ]]; then
-              awk -v a="^$2:" '$0 ~ a{s=1; next} s && /^[a-z]/{s=0} s && /image:/{f=1} s && f && /tag:/{gsub(/[" ]/,"",$2); print $2; exit}' "$1"
-            else
-              awk '/^image:/{f=1} f && /tag:/{gsub(/[" ]/,"",$2); print $2; exit}' "$1"
-            fi
-          }
-          declare -A tags=(
-            [backend]=$(chart_tag helm/core/values.yaml backend)
-            [auth]=$(chart_tag helm/core/values.yaml auth)
-            [leaderboards]=$(chart_tag helm/leaderboards/values.yaml)
-            [frontend]=$(chart_tag helm/frontend/values.yaml)
-          )
-          for service in "${!tags[@]}"; do
-            tag="${tags[$service]}"
-            [[ -n "$tag" ]] || { echo "no chart tag for ${service}"; exit 1; }
-            docker tag "myfitnessrank/${service}:${IMAGE_TAG}" "${REGISTRY}/myfitnessrank/${service}:${tag}"
-            docker push "${REGISTRY}/myfitnessrank/${service}:${tag}"
+          for result in ${{ join(needs.*.result, ' ') }}; do
+            case "$result" in
+              failure|cancelled) echo "a needed job ended: ${result}"; exit 1 ;;
+            esac
           done
+          echo "all jobs passed or were skipped by the path filter"

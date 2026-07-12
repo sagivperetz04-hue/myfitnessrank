@@ -102,6 +102,7 @@ Always check `releases/latest` — never assume the version you know is current.
 
 | Trigger | Jobs |
 |---|---|
-| Feature branch push | lint + build |
-| Merge to master | lint + build + push ECR + deploy staging |
-| Git tag `vX.Y.Z` | deploy production |
+| PR to master | per-service lint + test + build — only for services whose code/chart changed (`CI OK` is the required check) |
+| Merge to master | same, plus push changed services' images to ECR → ArgoCD deploys staging |
+| Git tag `vX.Y.Z` | build all images at the version + promotion PR → prod |
+| Feature branch push (no PR) | nothing |
