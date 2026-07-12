@@ -46,7 +46,9 @@ describe('LiftForm bodyweight cap', () => {
     render(<LiftForm username="tester" onResult={vi.fn()} />)
     fillForm({ exercise: 'deadlift', weight: '100', bodyweight })
 
-    expect(screen.getByRole('alert')).toHaveTextContent(expected)
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(expected)
+    expect(alert).toHaveTextContent(/capped at 640 kg/i)
     expect(screen.getByRole('button', { name: /get my rank/i })).toBeDisabled()
   })
 })

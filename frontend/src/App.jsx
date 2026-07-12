@@ -304,9 +304,9 @@ export function LiftForm({ username, onResult }) {
       )}
       {overBodyweight && (
         <p className="over-limit" role="alert">
-          {absurdBwMsg ?? (
-            <>The heaviest human ever recorded weighed 635 kg. Check the bodyweight.</>
-          )}
+          {absurdBwMsg && <>{absurdBwMsg}{' '}</>}
+          Bodyweight is capped at {BODYWEIGHT_CAP_KG} kg — the heaviest human
+          ever recorded weighed 635 kg.
         </p>
       )}
       {error && <p className="error" role="alert">{error}</p>}
