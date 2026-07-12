@@ -19,6 +19,16 @@ const WORLD_RECORDS = {
 }
 const WR_MARGIN_KG = 2
 
+// Escalating reality checks for absurd weights (kg floors, highest match wins).
+// Anything this heavy is already over every record — these replace the stock
+// over-limit message with the right question for the offender.
+const ABSURD_WEIGHTS = [
+  { floor: 100000, msg: 'Over 100 tonnes… are we dealing with TON 618? Black holes lift in solar masses.' },
+  { floor: 10000, msg: '10+ tonnes… are you a Merkava Mk4 Barak? Armor plates are not gym plates.' },
+  { floor: 1000, msg: 'More than a tonne… be honest: are you a truck?' },
+  { floor: 500, msg: '500 kg and counting… quick question: are you a car?' },
+]
+
 // Backend errors come as JSON, but a dead upstream answers with nginx HTML —
 // parse defensively so the user sees the status, not a JSON SyntaxError
 async function readJson(res) {
@@ -193,6 +203,9 @@ export function LiftForm({ username, onResult }) {
   const isTotal = form.exercise === 'total'
   const weightLimit = WORLD_RECORDS[form.exercise] + WR_MARGIN_KG
   const overLimit = parseFloat(form.weight_kg) > weightLimit
+  const absurdMsg = ABSURD_WEIGHTS.find(
+    ({ floor }) => parseFloat(form.weight_kg) >= floor,
+  )?.msg
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -274,8 +287,12 @@ export function LiftForm({ username, onResult }) {
 
       {overLimit && (
         <p className="over-limit" role="alert">
-          Really? That&apos;s above the world record ({weightLimit - WR_MARGIN_KG} kg).
-          Check the weight — or go claim the record.
+          {absurdMsg ?? (
+            <>
+              Really? That&apos;s above the world record ({weightLimit - WR_MARGIN_KG} kg).
+              Check the weight — or go claim the record.
+            </>
+          )}
         </p>
       )}
       {error && <p className="error" role="alert">{error}</p>}
