@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { LiftForm } from './App'
 
@@ -50,6 +50,44 @@ describe('LiftForm bodyweight cap', () => {
     expect(alert).toHaveTextContent(expected)
     expect(alert).toHaveTextContent(/capped at 640 kg/i)
     expect(screen.getByRole('button', { name: /get my rank/i })).toBeDisabled()
+  })
+})
+
+describe('LiftForm 70,000kg easter egg', () => {
+  let assignSpy
+  beforeEach(() => {
+    assignSpy = vi.fn()
+    const original = window.location
+    Object.defineProperty(window, 'location', {
+      value: { ...original, assign: assignSpy },
+      writable: true,
+      configurable: true,
+    })
+  })
+
+  it.each([
+    ['weight', { exercise: 'deadlift', weight: '70000', bodyweight: '85' }],
+    ['bodyweight', { exercise: 'deadlift', weight: '100', bodyweight: '70000' }],
+  ])('redirects on submit when %s is exactly 70,000kg', (_field, values) => {
+    const onResult = vi.fn()
+    render(<LiftForm username="tester" onResult={onResult} />)
+    fillForm(values)
+    fireEvent.change(screen.getByLabelText('Reps (1–20)'), { target: { value: '1' } })
+
+    const button = screen.getByRole('button', { name: /get my rank/i })
+    expect(button).toBeEnabled()
+    fireEvent.click(button)
+
+    expect(assignSpy).toHaveBeenCalledWith('https://www.youtube.com/watch?v=U_nofc462QI')
+    expect(onResult).not.toHaveBeenCalled()
+  })
+
+  it('does not fire for a near miss', () => {
+    render(<LiftForm username="tester" onResult={vi.fn()} />)
+    fillForm({ exercise: 'deadlift', weight: '70001', bodyweight: '85' })
+
+    expect(screen.getByRole('button', { name: /get my rank/i })).toBeDisabled()
+    expect(assignSpy).not.toHaveBeenCalled()
   })
 })
 
