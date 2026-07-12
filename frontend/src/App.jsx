@@ -22,6 +22,11 @@ const WR_MARGIN_KG = 2
 // Heaviest human ever recorded: 635 kg — mirror of the backend's hard cap
 const BODYWEIGHT_CAP_KG = 640
 
+// Exactly a Merkava's worth of kilograms, in either field, sends the lifter
+// where they belong instead of submitting.
+const EASTER_EGG_KG = 70000
+const EASTER_EGG_URL = 'https://www.youtube.com/watch?v=U_nofc462QI'
+
 // Escalating reality checks for absurd weights (kg floors, highest match wins).
 // Anything this heavy is already over every record — these replace the stock
 // over-limit message with the right question for the offender.
@@ -213,9 +218,16 @@ export function LiftForm({ username, onResult }) {
   const absurdBwMsg = ABSURD_WEIGHTS.find(
     ({ floor }) => parseFloat(form.bodyweight_kg) >= floor,
   )?.msg
+  const easterEgg =
+    parseFloat(form.weight_kg) === EASTER_EGG_KG ||
+    parseFloat(form.bodyweight_kg) === EASTER_EGG_KG
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (easterEgg) {
+      window.location.assign(EASTER_EGG_URL)
+      return
+    }
     if (overLimit || overBodyweight) return
     setError(null)
     setLoading(true)
@@ -311,7 +323,8 @@ export function LiftForm({ username, onResult }) {
       )}
       {error && <p className="error" role="alert">{error}</p>}
 
-      <button type="submit" disabled={loading || overLimit || overBodyweight}>
+      {/* the easter egg re-enables submit so the redirect can fire */}
+      <button type="submit" disabled={loading || ((overLimit || overBodyweight) && !easterEgg)}>
         {loading ? 'Calculating…' : 'Get my rank'}
       </button>
     </form>

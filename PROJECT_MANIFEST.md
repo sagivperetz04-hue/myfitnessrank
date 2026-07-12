@@ -136,7 +136,7 @@ React 18 + Vite, served by **unprivileged nginx** which doubles as the API gatew
 ### Application code
 | File | What it does |
 |---|---|
-| `src/App.jsx` | Dashboard: lift input form, rank results, history, leaderboard page; client-side world-record sanity check (UX only — backend is the real gate); intro overlay shows a first-visit greeting vs. "welcome back" (online: `first_login` from auth; guest: per-username `mfr_greeted_*` localStorage flag); absurd-weight prompts (500kg+ → car / truck / Merkava Mk4 / TON 618) replace the record message, on both the lift weight and the bodyweight (bodyweight blocked past 640 kg with the tier question shown alongside the cap notice) |
+| `src/App.jsx` | Dashboard: lift input form, rank results, history, leaderboard page; client-side world-record sanity check (UX only — backend is the real gate); intro overlay shows a first-visit greeting vs. "welcome back" (online: `first_login` from auth; guest: per-username `mfr_greeted_*` localStorage flag); absurd-weight prompts (500kg+ → car / truck / Merkava Mk4 / TON 618) replace the record message, on both the lift weight and the bodyweight (bodyweight blocked past 640 kg with the tier question shown alongside the cap notice); easter egg: exactly 70,000 kg in either field redirects to a YouTube video on submit |
 | `src/LoginPage.jsx` + `src/auth.js` | Signup/login UI, access-token handling, silent refresh |
 | `src/RankBadge.jsx` / `.css` + `src/tiers.js` | Tier badge rendering (Copper → Elite) |
 | `src/ErrorBoundary.jsx` | Catches render errors instead of white-screening |
