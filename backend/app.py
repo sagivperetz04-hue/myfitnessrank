@@ -68,6 +68,10 @@ _WORLD_RECORDS_KG = {
 }
 _WR_MARGIN_KG = 2
 
+# Heaviest human ever recorded weighed 635 kg — past that it's a vehicle,
+# not a lifter. Same philosophy as the lift cap: real-world record + margin.
+_BODYWEIGHT_CAP_KG = 640
+
 
 def _db():
     if "db" not in g:
@@ -190,6 +194,15 @@ def rank():
                 "error": (
                     f"weight_kg must be at most {weight_cap_kg} kg for {exercise} "
                     "— that would beat the world record"
+                )
+            }
+        ), 400
+    if bodyweight_kg > _BODYWEIGHT_CAP_KG:
+        return jsonify(
+            {
+                "error": (
+                    f"bodyweight_kg must be at most {_BODYWEIGHT_CAP_KG} kg "
+                    "— the heaviest human ever recorded weighed 635 kg"
                 )
             }
         ), 400

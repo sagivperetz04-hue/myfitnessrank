@@ -169,6 +169,15 @@ class TestRankValidation:
         )
         assert r.status_code == 200
 
+    def test_bodyweight_above_cap_returns_400(self, client):
+        r = client.post("/api/rank", json={**VALID, "bodyweight_kg": 9239123})
+        assert r.status_code == 400
+        assert "heaviest human" in r.get_json()["error"]
+
+    def test_bodyweight_at_cap_accepted(self, client):
+        r = client.post("/api/rank", json={**VALID, "bodyweight_kg": 640})
+        assert r.status_code == 200
+
     def test_cap_is_per_exercise(self, client):
         # 400 kg is a legal deadlift but an impossible bench
         assert (
