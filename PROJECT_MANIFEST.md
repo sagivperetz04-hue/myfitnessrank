@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-12, per-service CI with path filters + real branch protection (RND-018).
+> Last updated: 2026-07-12, bodyweight cap 640 kg on both layers + absurd prompts on bodyweight (RND-020).
 
 ---
 
@@ -53,7 +53,7 @@ Core ranking API. Python 3.11 + Flask 3.0.3, served by gunicorn (2 workers).
 |---|---|---|
 | GET | `/health/live` | Liveness — deliberately **never** touches the DB (a DB outage should fail readiness, not restart pods) |
 | GET | `/health` | Readiness — `SELECT 1` DB ping, 503 when DB unreachable |
-| POST | `/api/rank` | Validates username/exercise/sex/weight/reps (reps ≤ 20 for Epley reliability, weight capped at world record + 2 kg), computes 1RM, persists the log, returns competition + world-average percentile/tier. RND-011: when a Bearer token is present it is verified and the log is recorded under the token's username (a present-but-invalid token → 401; no token = guest mode, body username trusted) — closes the hole where any signed-in user could write history under another username. RND-008: if the request carries a Bearer token, forwards the user's best squat/bench/deadlift 1RMs to the leaderboards `/submit` (best-effort — a leaderboards outage never fails the rank; skipped until all three lifts have been logged; the leaderboards service dedups one row per user per sex via keep-the-best upsert). No lift verification yet — planned |
+| POST | `/api/rank` | Validates username/exercise/sex/weight/reps (reps ≤ 20 for Epley reliability, weight capped at world record + 2 kg, bodyweight capped at 640 kg — heaviest recorded human + margin, RND-020), computes 1RM, persists the log, returns competition + world-average percentile/tier. RND-011: when a Bearer token is present it is verified and the log is recorded under the token's username (a present-but-invalid token → 401; no token = guest mode, body username trusted) — closes the hole where any signed-in user could write history under another username. RND-008: if the request carries a Bearer token, forwards the user's best squat/bench/deadlift 1RMs to the leaderboards `/submit` (best-effort — a leaderboards outage never fails the rank; skipped until all three lifts have been logged; the leaderboards service dedups one row per user per sex via keep-the-best upsert). No lift verification yet — planned |
 | GET | `/api/users/<username>/history` | Paginated (limit ≤ 100), optional exercise filter |
 | GET | `/api/users/<username>/best` | Best 1RM per exercise (`DISTINCT ON`) |
 | GET | `/api/leaderboard` | Proxies to the leaderboards service; 502 if upstream down |
@@ -136,7 +136,7 @@ React 18 + Vite, served by **unprivileged nginx** which doubles as the API gatew
 ### Application code
 | File | What it does |
 |---|---|
-| `src/App.jsx` | Dashboard: lift input form, rank results, history, leaderboard page; client-side world-record sanity check (UX only — backend is the real gate); intro overlay shows a first-visit greeting vs. "welcome back" (online: `first_login` from auth; guest: per-username `mfr_greeted_*` localStorage flag); absurd-weight prompts (500kg+ → car / truck / Merkava Mk4 / TON 618) replace the record message |
+| `src/App.jsx` | Dashboard: lift input form, rank results, history, leaderboard page; client-side world-record sanity check (UX only — backend is the real gate); intro overlay shows a first-visit greeting vs. "welcome back" (online: `first_login` from auth; guest: per-username `mfr_greeted_*` localStorage flag); absurd-weight prompts (500kg+ → car / truck / Merkava Mk4 / TON 618) replace the record message, on both the lift weight and the bodyweight (bodyweight blocked past 640 kg, mirroring the backend cap) |
 | `src/LoginPage.jsx` + `src/auth.js` | Signup/login UI, access-token handling, silent refresh |
 | `src/RankBadge.jsx` / `.css` + `src/tiers.js` | Tier badge rendering (Copper → Elite) |
 | `src/ErrorBoundary.jsx` | Catches render errors instead of white-screening |

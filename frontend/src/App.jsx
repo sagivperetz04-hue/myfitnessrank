@@ -19,6 +19,9 @@ const WORLD_RECORDS = {
 }
 const WR_MARGIN_KG = 2
 
+// Heaviest human ever recorded: 635 kg — mirror of the backend's hard cap
+const BODYWEIGHT_CAP_KG = 640
+
 // Escalating reality checks for absurd weights (kg floors, highest match wins).
 // Anything this heavy is already over every record — these replace the stock
 // over-limit message with the right question for the offender.
@@ -206,10 +209,14 @@ export function LiftForm({ username, onResult }) {
   const absurdMsg = ABSURD_WEIGHTS.find(
     ({ floor }) => parseFloat(form.weight_kg) >= floor,
   )?.msg
+  const overBodyweight = parseFloat(form.bodyweight_kg) > BODYWEIGHT_CAP_KG
+  const absurdBwMsg = ABSURD_WEIGHTS.find(
+    ({ floor }) => parseFloat(form.bodyweight_kg) >= floor,
+  )?.msg
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (overLimit) return
+    if (overLimit || overBodyweight) return
     setError(null)
     setLoading(true)
     try {
@@ -295,9 +302,16 @@ export function LiftForm({ username, onResult }) {
           )}
         </p>
       )}
+      {overBodyweight && (
+        <p className="over-limit" role="alert">
+          {absurdBwMsg ?? (
+            <>The heaviest human ever recorded weighed 635 kg. Check the bodyweight.</>
+          )}
+        </p>
+      )}
       {error && <p className="error" role="alert">{error}</p>}
 
-      <button type="submit" disabled={loading || overLimit}>
+      <button type="submit" disabled={loading || overLimit || overBodyweight}>
         {loading ? 'Calculating…' : 'Get my rank'}
       </button>
     </form>
