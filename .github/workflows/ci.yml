@@ -10,6 +10,10 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  # The release workflow dispatches CI onto its promotion branch: pushes made
+  # with GITHUB_TOKEN never trigger workflows (anti-recursion), so without this
+  # the required CI OK check would never report and the PR could not merge.
+  workflow_dispatch:
 
 # A newer push to the same ref supersedes the running CI for it
 concurrency:

@@ -294,7 +294,7 @@ Status: RND-005 merged to master (PR #4, 2026-07-02); first live sync exposed an
 ## 11. CI — GitHub Actions (`.github/workflows/ci.yml`)
 
 Per-service pipelines (RND-018). Triggers: **PRs to master** (the merge gate) and
-**pushes to master** (the staging deploy) — feature-branch pushes without a PR run
+**pushes to master** (the staging deploy) + workflow_dispatch (the release workflow dispatches CI onto its promotion branch — GITHUB_TOKEN pushes never trigger workflows) — feature-branch pushes without a PR run
 nothing, and the old push+PR double-run is gone (plus `concurrency` cancels superseded
 runs on the same ref).
 
