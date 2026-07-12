@@ -4,9 +4,9 @@
 auth:
   image:
     repository: 809379394639.dkr.ecr.us-east-1.amazonaws.com/myfitnessrank/auth
-    tag: "0.5.0"
+    tag: "0.6.0"
 
 backend:
   image:
     repository: 809379394639.dkr.ecr.us-east-1.amazonaws.com/myfitnessrank/backend
-    tag: "0.5.0"
+    tag: "0.6.0"
