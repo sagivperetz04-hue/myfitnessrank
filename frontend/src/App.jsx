@@ -296,7 +296,8 @@ export function LiftForm({ username, onResult }) {
           />
         </label>
         <label>
-          Sex
+          {/* UI wording only — the API field and values stay `sex` M/F */}
+          Gender
           <select value={form.sex} onChange={set('sex')}>
             <option value="M">Male</option>
             <option value="F">Female</option>
