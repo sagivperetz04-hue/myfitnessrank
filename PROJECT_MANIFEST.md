@@ -2,7 +2,7 @@
 
 > Snapshot of everything built so far, section by section, plus the roadmap templates
 > for what remains (EKS, Terraform, Terragrunt, deploy pipelines, logging).
-> Last updated: 2026-07-11, v0.4.0 promoted to prod; release workflow now auto-updates the prod-pins line.
+> Last updated: 2026-07-12, per-service CI with path filters + real branch protection (RND-018).
 
 ---
 
@@ -293,23 +293,23 @@ Status: RND-005 merged to master (PR #4, 2026-07-02); first live sync exposed an
 
 ## 11. CI — GitHub Actions (`.github/workflows/ci.yml`)
 
-Runs on every branch push and PRs to master.
+Per-service pipelines (RND-018). Triggers: **PRs to master** (the merge gate) and
+**pushes to master** (the staging deploy) — feature-branch pushes without a PR run
+nothing, and the old push+PR double-run is gone (plus `concurrency` cancels superseded
+runs on the same ref).
 
 | Job | What it does |
 |---|---|
-| `lint` | ruff check + ruff format check over backend/auth/leaderboards (pinned ruff 0.6.9) |
-| `test` | Backend pytest against a real `postgres:15.6-alpine` service container (health-checked) |
-| `test-auth` | Auth pytest (test-only `JWT_SIGNING_KEY` env, clearly marked not-for-prod) |
-| `test-leaderboards` | Leaderboards pytest |
-| `frontend` | npm ci (`--ignore-scripts`) → lint → vitest → production build |
-| `build` | Needs all test jobs; docker-builds all three service images; on `master` only, checks AWS secrets, assumes role via **OIDC** (`id-token: write`, no long-lived keys), logs into ECR, pushes |
+| `changes` | `dorny/paths-filter` (SHA-pinned) — decides which services run; each service's filter covers its code **and its helm chart** (chart values carry the image tag the push publishes under) |
+| `backend` / `auth` / `leaderboards` | Run only if changed: ruff (that service only) → pytest (backend against a real `postgres:15.6-alpine` service container; auth with a test-only `JWT_SIGNING_KEY`) → docker build → on master push: OIDC → ECR push (sha tag + chart tag) |
+| `frontend` | Run only if changed: npm ci (`--ignore-scripts`) → lint → vitest → build → docker build → same ECR push flow |
+| `ci-ok` | **The single required status check** — always runs, fails if any needed job failed, passes when jobs were skipped by the path filter (prevents the required-checks deadlock on path-filtered workflows) |
 
 Standards enforced:
 - **Every `uses:` is pinned to a full commit SHA** with the version as a trailing comment — resolved live from the GitHub API, never from memory.
 - Pip/npm caches keyed on lockfiles; Python 3.11 / Node 22 pinned.
 - Secrets never referenced in `if:` expressions directly (exposed via step output instead).
-
-The build job docker-builds all four images and, on `master`, pushes each to its own ECR repository (`myfitnessrank/<service>`), matching the repositories Terraform will create (§14.3).
+- Branch protection on `master` requires the `CI OK` check (enabled 2026-07-12 — it was documented but never actually enabled).
 
 ---
 
