@@ -197,7 +197,7 @@ Charts hold the defaults; per-environment differences live in small values overl
 frontend ingress host per env, and prod's pinned image tags (the promotion gate).
 auth + backend overlays are one `core.yaml` per env with the settings nested under the
 `auth:`/`backend:` alias keys (dev's also enables the backend HPA).
-Current prod pins: v0.5.0 (all four services; this line is auto-updated by the release workflow).
+Current prod pins: v0.6.0 (all four services; this line is auto-updated by the release workflow).
 Prod's leaderboards overlay also carries the only real SMTP config (Gmail relay;
 the `leaderboards-smtp-credentials` secret is materialized by ESO from Secrets
 Manager — RND-016); staging/dev stay log-only.
