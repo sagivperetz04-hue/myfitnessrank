@@ -113,7 +113,7 @@ Public leaderboards + authenticated lift submission. Own Postgres, seeded with a
 | `services/mailer.py` | RND-009: top-200 congratulations/verification mail via stdlib `smtplib`. Env: `SMTP_HOST` (unset = mail is logged, not sent — local/dev default), `SMTP_PORT`, `SMTP_STARTTLS`, `MAIL_FROM`, `SMTP_USER`/`SMTP_PASSWORD` from an optional secret. Recipient email comes from the JWT claims. Sent once per entry: only when rank ≤ 200 and `notified_at IS NULL`; stamped only after a successful send so failures retry on the next submit. Asks for lift video + bodyweight photo within 7 days (manual verification for now) |
 | `services/tokens.py` | Verifies the auth service's JWTs (shared signing key — no call to auth needed per request) |
 | `services/crypto.py` | Crypto helpers (cryptography lib) |
-| `scripts/seed_pool.csv` + `extract_seed.py` + `load_seed.py` | Seed dataset of lifters loaded into the DB by a Helm **seed Job** |
+| `scripts/seed_pool.csv` + `extract_seed.py` + `load_seed.py` | Seed dataset of lifters loaded into the DB by the **seed Job** (idempotent, replaces `source='seed'` rows) |
 
 ### Endpoints
 | Method | Path | Notes |
@@ -190,7 +190,7 @@ Every chart contains `Chart.yaml`, `values.yaml`, `deployment.yaml`, `service.ya
 | Exposure | Backend/auth/leaderboards ingress **disabled** — only the frontend has an Ingress; nginx proxies the rest |
 | Labels | Shared `app: myfitnessrank` + per-service `component:` label (drives monitoring selection) |
 
-Leaderboards chart additionally has `seed-job.yaml` — a Job that loads the seed lifter pool.
+Leaderboards chart additionally has `seed-job.yaml` — a Job that loads the seed lifter pool. RND-024: it is a plain sync-wave-5 resource with `Replace=true`, **not** a Helm/ArgoCD hook — ArgoCD's operation-resume path drops PostSync hooks (`skipHooks=true` on resume), which left prod's board empty on boot; as a tracked resource the Job is recreated whenever it's missing.
 
 Charts hold the defaults; per-environment differences live in small values overlays under
 `deploy/envs/<env>/<service>.yaml` — replicas/resources (dev/staging run lighter), the

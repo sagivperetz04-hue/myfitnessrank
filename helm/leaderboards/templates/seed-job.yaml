@@ -6,9 +6,14 @@ metadata:
   labels:
     {{- include "leaderboards.labels" . | nindent 4 }}
   annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "5"
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    # A tracked resource, NOT a sync hook: ArgoCD's operation-resume path runs
+    # with skipHooks=true, so a PostSync hook is silently dropped whenever the
+    # sync pauses at "waiting for healthy state" and resumes a moment later —
+    # prod booted with an empty leaderboard exactly this way. As a plain
+    # resource the Job is recreated whenever it's missing (fresh boot) and
+    # Replace clears the previous run despite Job immutability.
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-options: Replace=true
 spec:
   backoffLimit: {{ .Values.seedJob.backoffLimit }}
   template:
